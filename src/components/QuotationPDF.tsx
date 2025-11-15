@@ -189,7 +189,7 @@ const QuotationPDF = ({ quotation, doctors }: QuotationPDFProps) => {
         <View style={styles.header}>
           <Image 
             style={styles.logo}
-            src="/src/assets/logo-dental.jpg"
+            src="/logo-dental.jpg" // Cambiado a ruta desde carpeta public
           />
           <View style={styles.headerText}>
             <Text style={styles.title}>COTIZACIÓN</Text>
