@@ -194,6 +194,8 @@ export default function Reports() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Producto</TableHead>
+                  <TableHead>Talla</TableHead>
+                  <TableHead>Color</TableHead>
                   <TableHead>Stock Actual</TableHead>
                   <TableHead>Última Venta</TableHead>
                 </TableRow>
@@ -202,6 +204,24 @@ export default function Reports() {
                 {leastSoldProducts.map((product) => (
                   <TableRow key={product.idproducto}>
                     <TableCell className="font-medium">{product.nombre}</TableCell>
+                    <TableCell>
+                      {product.talla ? (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                          {product.talla}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {product.color ? (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          {product.color}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
                     <TableCell>{product.stock} unidades</TableCell>
                     <TableCell>
                       {product.ultima_venta ? (
@@ -240,6 +260,8 @@ export default function Reports() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Producto</TableHead>
+                  <TableHead>Talla</TableHead>
+                  <TableHead>Color</TableHead>
                   <TableHead>Stock Actual</TableHead>
                   <TableHead>Stock Mínimo</TableHead>
                 </TableRow>
@@ -248,7 +270,29 @@ export default function Reports() {
                 {lowStockProducts.map(product => (
                   <TableRow key={product.idproducto}>
                     <TableCell className="font-medium">{product.nombre}</TableCell>
-                    <TableCell>{product.stock} unidades</TableCell>
+                    <TableCell>
+                      {product.talla ? (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                          {product.talla}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {product.color ? (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          {product.color}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className={`font-medium ${product.stock === 0 ? 'text-destructive' : 'text-amber-600'}`}>
+                        {product.stock} unidades
+                      </span>
+                    </TableCell>
                     <TableCell>{product.stock_minimo} unidades</TableCell>
                   </TableRow>
                 ))}

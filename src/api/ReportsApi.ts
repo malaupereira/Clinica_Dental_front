@@ -1,4 +1,4 @@
-// src/api/ReportsApi.ts (solo las interfaces actualizadas)
+// src/api/ReportsApi.ts
 import axios from "axios";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
@@ -11,6 +11,8 @@ export interface Product {
   stock: number;
   stock_minimo: number;
   estado: number;
+  talla?: string;
+  color?: string;
 }
 
 // Interfaces para productos/servicios más vendidos
@@ -19,6 +21,8 @@ export interface MostSoldItem {
   nombre: string;
   cantidad_vendida: number;
   ingresos_totales: number;
+  talla?: string;
+  color?: string;
 }
 
 // Interfaces para productos con stock bajo
@@ -27,6 +31,8 @@ export interface LowStockProduct {
   nombre: string;
   stock: number;
   stock_minimo: number;
+  talla?: string;
+  color?: string;
 }
 
 // Interfaces para productos menos vendidos
@@ -35,6 +41,8 @@ export interface LeastSoldProduct {
   nombre: string;
   stock: number;
   ultima_venta: string | null;
+  talla?: string;
+  color?: string;
 }
 
 // Interface principal para reportes
