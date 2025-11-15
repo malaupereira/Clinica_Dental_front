@@ -315,7 +315,7 @@ export default function Inventory() {
 
   return (
     <div className="min-h-screen bg-background p-3 sm:p-4 lg:p-6">
-      <div className="max-w-[1920px] mx-auto space-y-4 sm:space-y-6">
+      <div className="max-w-full mx-auto space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 sm:gap-4">
           <div>
             <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground">Inventario</h1>
@@ -511,55 +511,55 @@ export default function Inventory() {
           </Dialog>
         </div>
 
-        {/* Estadísticas */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Total Productos</CardTitle>
-              <Package className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+        {/* Estadísticas - Completamente responsivas */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
+          <Card className="w-full">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3">
+              <CardTitle className="text-xs font-medium">Total Productos</CardTitle>
+              <Package className="h-3 w-3 text-muted-foreground" />
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="text-xl sm:text-2xl font-bold">{stats.totalProducts}</div>
+            <CardContent className="p-3 pt-0">
+              <div className="text-lg font-bold">{stats.totalProducts}</div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Stock Bajo</CardTitle>
-              <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 text-amber-500" />
+          <Card className="w-full">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3">
+              <CardTitle className="text-xs font-medium">Stock Bajo</CardTitle>
+              <AlertCircle className="h-3 w-3 text-amber-500" />
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="text-xl sm:text-2xl font-bold text-amber-600">{stats.lowStockProducts}</div>
+            <CardContent className="p-3 pt-0">
+              <div className="text-lg font-bold text-amber-600">{stats.lowStockProducts}</div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Inversión Total</CardTitle>
-              <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
+          <Card className="w-full">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3">
+              <CardTitle className="text-xs font-medium">Inversión Total</CardTitle>
+              <DollarSign className="h-3 w-3 text-blue-500" />
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="text-xl sm:text-2xl font-bold text-blue-600">Bs. {stats.totalInvestment.toFixed(2)}</div>
+            <CardContent className="p-3 pt-0">
+              <div className="text-lg font-bold text-blue-600">Bs. {stats.totalInvestment.toFixed(2)}</div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Venta Potencial</CardTitle>
-              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
+          <Card className="w-full">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3">
+              <CardTitle className="text-xs font-medium">Venta Potencial</CardTitle>
+              <TrendingUp className="h-3 w-3 text-green-500" />
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="text-xl sm:text-2xl font-bold text-green-600">Bs. {stats.potentialRevenue.toFixed(2)}</div>
+            <CardContent className="p-3 pt-0">
+              <div className="text-lg font-bold text-green-600">Bs. {stats.potentialRevenue.toFixed(2)}</div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Utilidad Potencial</CardTitle>
-              <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-purple-500" />
+          <Card className="w-full">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3">
+              <CardTitle className="text-xs font-medium">Utilidad Potencial</CardTitle>
+              <DollarSign className="h-3 w-3 text-purple-500" />
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className={`text-xl sm:text-2xl font-bold ${
+            <CardContent className="p-3 pt-0">
+              <div className={`text-lg font-bold ${
                 stats.potentialProfit >= 0 ? 'text-purple-600' : 'text-red-600'
               }`}>
                 Bs. {stats.potentialProfit.toFixed(2)}
@@ -568,9 +568,9 @@ export default function Inventory() {
           </Card>
         </div>
 
-        <Card className="w-full">
-          <CardHeader className="space-y-3 sm:space-y-4 p-4 sm:p-6">
-            <CardTitle className="text-base sm:text-lg lg:text-xl">Lista de Productos</CardTitle>
+        <Card className="w-full overflow-hidden">
+          <CardHeader className="space-y-3 p-4">
+            <CardTitle className="text-base sm:text-lg">Lista de Productos</CardTitle>
             
             {/* Filtros y búsqueda */}
             <div className="space-y-3">
@@ -580,7 +580,7 @@ export default function Inventory() {
                   placeholder="Buscar producto..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 sm:pl-10 text-sm sm:text-base"
+                  className="pl-8 sm:pl-10 text-sm"
                   disabled={isSubmitting}
                 />
               </div>
@@ -649,9 +649,9 @@ export default function Inventory() {
             </div>
           </CardHeader>
           
-          <CardContent className="p-0 sm:p-2 lg:p-6">
+          <CardContent className="p-0">
             {/* Vista móvil - Cards colapsables */}
-            <div className="block md:hidden space-y-2 p-2">
+            <div className="block lg:hidden space-y-2 p-2">
               {loading ? (
                 [1, 2, 3].map((i) => (
                   <div key={i} className="border rounded-lg p-3 animate-pulse">
@@ -803,193 +803,54 @@ export default function Inventory() {
               )}
             </div>
 
-            {/* Vista tablet - Tabla simplificada */}
-            <div className="hidden md:block lg:hidden w-full">
-              <div className="w-full overflow-x-auto">
-                <Table className="w-full min-w-[800px]">
-                  <TableHeader className="bg-muted/50">
-                    <TableRow>
-                      <TableHead className="text-sm font-bold cursor-pointer" onClick={() => handleSort('nombre')}>
-                        <div className="flex items-center">
-                          Producto
-                          {getSortIcon('nombre')}
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-sm font-bold">Talla/Color</TableHead>
-                      <TableHead className="text-sm font-bold">Precios</TableHead>
-                      <TableHead className="text-sm font-bold cursor-pointer" onClick={() => handleSort('stock')}>
-                        <div className="flex items-center">
-                          Stock
-                          {getSortIcon('stock')}
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-sm font-bold">Finanzas</TableHead>
-                      <TableHead className="text-sm font-bold text-center">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      [1, 2, 3].map((i) => (
-                        <TableRow key={i}>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-full animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-8 bg-gray-200 rounded w-full animate-pulse"></div></TableCell>
-                        </TableRow>
-                      ))
-                    ) : filteredAndSortedProducts.length > 0 ? (
-                      filteredAndSortedProducts.map((product) => {
-                        const stats = calculateProductStats(product);
-                        const isLowStock = product.stock <= product.stock_minimo;
-                        
-                        return (
-                          <TableRow key={product.idproducto} className="hover:bg-muted/30">
-                            <TableCell className="font-medium text-sm">
-                              <div className="flex items-center gap-2">
-                                <div className="break-words whitespace-normal max-w-[150px]">
-                                  {product.nombre}
-                                </div>
-                                {isLowStock && (
-                                  <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              <div>Talla: {product.talla || 'NA'}</div>
-                              <div>Color: {product.color || 'NA'}</div>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              <div>Compra: Bs. {product.precio_compra.toFixed(2)}</div>
-                              <div>Venta: Bs. {product.precio_venta.toFixed(2)}</div>
-                              <div className={`text-xs ${stats.margin > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
-                                Margen: Bs. {stats.margin.toFixed(2)}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              <div className={`font-medium ${
-                                isLowStock ? 'text-amber-600' : 'text-foreground'
-                              }`}>
-                                {product.stock}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Mín: {product.stock_minimo}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              <div>Inversión: Bs. {stats.totalInvestment.toFixed(2)}</div>
-                              <div>Venta: Bs. {stats.potentialSale.toFixed(2)}</div>
-                              <div className={`text-xs ${stats.potentialProfit > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
-                                Utilidad: Bs. {stats.potentialProfit.toFixed(2)}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1 justify-center">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleEdit(product)}
-                                  className="h-8 w-8 p-0"
-                                  disabled={isSubmitting}
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setAddingStockProduct(product)}
-                                  className="h-8 w-8 p-0"
-                                  disabled={isSubmitting}
-                                >
-                                  <PackagePlus className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setDeletingProductId(product.idproducto)}
-                                  className="h-8 w-8 p-0"
-                                  disabled={isSubmitting}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground text-sm py-8">
-                          {searchQuery || colorFilter !== 'all' || tallaFilter !== 'all' 
-                            ? 'No se encontraron productos con los filtros aplicados' 
-                            : 'No hay productos registrados'}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-
-            {/* Vista desktop completa - Tabla completa */}
+            {/* Vista desktop - Tabla adaptable */}
             <div className="hidden lg:block w-full">
               <div className="w-full overflow-x-auto">
-                <Table className="w-full min-w-[1200px]">
+                <Table className="w-full">
                   <TableHeader className="bg-muted/50">
                     <TableRow>
-                      <TableHead className="text-sm font-bold cursor-pointer w-[25%] min-w-[250px]" onClick={() => handleSort('nombre')}>
+                      <TableHead className="text-xs font-bold cursor-pointer w-[20%]" onClick={() => handleSort('nombre')}>
                         <div className="flex items-center">
                           Producto
                           {getSortIcon('nombre')}
                         </div>
                       </TableHead>
-                      <TableHead className="text-sm font-bold cursor-pointer w-[8%] min-w-[80px]" onClick={() => handleSort('talla')}>
+                      <TableHead className="text-xs font-bold cursor-pointer w-[8%]" onClick={() => handleSort('talla')}>
                         <div className="flex items-center">
                           Talla
                           {getSortIcon('talla')}
                         </div>
                       </TableHead>
-                      <TableHead className="text-sm font-bold cursor-pointer w-[10%] min-w-[100px]" onClick={() => handleSort('color')}>
+                      <TableHead className="text-xs font-bold cursor-pointer w-[10%]" onClick={() => handleSort('color')}>
                         <div className="flex items-center">
                           Color
                           {getSortIcon('color')}
                         </div>
                       </TableHead>
-                      <TableHead className="text-sm font-bold w-[8%] min-w-[90px]">Compra (Bs.)</TableHead>
-                      <TableHead className="text-sm font-bold w-[8%] min-w-[90px]">Venta (Bs.)</TableHead>
-                      <TableHead className="text-sm font-bold w-[8%] min-w-[90px]">Margen (Bs.)</TableHead>
-                      <TableHead className="text-sm font-bold w-[8%] min-w-[80px]">Margen %</TableHead>
-                      <TableHead className="text-sm font-bold cursor-pointer w-[6%] min-w-[70px]" onClick={() => handleSort('stock')}>
+                      <TableHead className="text-xs font-bold w-[8%]">Compra</TableHead>
+                      <TableHead className="text-xs font-bold w-[8%]">Venta</TableHead>
+                      <TableHead className="text-xs font-bold w-[8%]">Margen</TableHead>
+                      <TableHead className="text-xs font-bold w-[8%]">Margen %</TableHead>
+                      <TableHead className="text-xs font-bold cursor-pointer w-[6%]" onClick={() => handleSort('stock')}>
                         <div className="flex items-center">
                           Stock
                           {getSortIcon('stock')}
                         </div>
                       </TableHead>
-                      <TableHead className="text-sm font-bold w-[6%] min-w-[70px]">Mínimo</TableHead>
-                      <TableHead className="text-sm font-bold w-[9%] min-w-[100px]">Inversión (Bs.)</TableHead>
-                      <TableHead className="text-sm font-bold w-[10%] min-w-[110px]">Venta Potencial (Bs.)</TableHead>
-                      <TableHead className="text-sm font-bold w-[9%] min-w-[100px]">Utilidad (Bs.)</TableHead>
-                      <TableHead className="text-sm font-bold w-[10%] min-w-[120px] text-center">Acciones</TableHead>
+                      <TableHead className="text-xs font-bold w-[6%]">Mínimo</TableHead>
+                      <TableHead className="text-xs font-bold w-[9%]">Inversión</TableHead>
+                      <TableHead className="text-xs font-bold w-[9%]">Venta Pot.</TableHead>
+                      <TableHead className="text-xs font-bold w-[8%]">Utilidad</TableHead>
+                      <TableHead className="text-xs font-bold w-[12%] text-center">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       [1, 2, 3].map((i) => (
                         <TableRow key={i}>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-full animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
-                          <TableCell><div className="h-8 bg-gray-200 rounded w-full animate-pulse"></div></TableCell>
+                          {[...Array(13)].map((_, j) => (
+                            <TableCell key={j}><div className="h-4 bg-gray-200 rounded w-full animate-pulse"></div></TableCell>
+                          ))}
                         </TableRow>
                       ))
                     ) : filteredAndSortedProducts.length > 0 ? (
@@ -999,9 +860,9 @@ export default function Inventory() {
                         
                         return (
                           <TableRow key={product.idproducto} className="hover:bg-muted/30">
-                            <TableCell className="font-medium text-sm">
-                              <div className="flex items-center gap-2">
-                                <div className="break-words whitespace-normal">
+                            <TableCell className="text-xs font-medium">
+                              <div className="flex items-center gap-1">
+                                <div className="break-words line-clamp-2">
                                   {product.nombre}
                                 </div>
                                 {isLowStock && (
@@ -1009,25 +870,25 @@ export default function Inventory() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="text-sm">{product.talla || 'NA'}</TableCell>
-                            <TableCell className="text-sm">{product.color || 'NA'}</TableCell>
-                            <TableCell className="text-sm">Bs. {product.precio_compra.toFixed(2)}</TableCell>
-                            <TableCell className="text-sm">Bs. {product.precio_venta.toFixed(2)}</TableCell>
-                            <TableCell className={`text-sm ${stats.margin > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
+                            <TableCell className="text-xs">{product.talla || 'NA'}</TableCell>
+                            <TableCell className="text-xs">{product.color || 'NA'}</TableCell>
+                            <TableCell className="text-xs">Bs. {product.precio_compra.toFixed(2)}</TableCell>
+                            <TableCell className="text-xs">Bs. {product.precio_venta.toFixed(2)}</TableCell>
+                            <TableCell className={`text-xs ${stats.margin > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
                               Bs. {stats.margin.toFixed(2)}
                             </TableCell>
-                            <TableCell className={`text-sm ${stats.marginPercentage > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
+                            <TableCell className={`text-xs ${stats.marginPercentage > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
                               {stats.marginPercentage.toFixed(1)}%
                             </TableCell>
-                            <TableCell className={`text-sm font-medium ${
+                            <TableCell className={`text-xs font-medium ${
                               isLowStock ? 'text-amber-600' : 'text-foreground'
                             }`}>
                               {product.stock}
                             </TableCell>
-                            <TableCell className="text-sm">{product.stock_minimo}</TableCell>
-                            <TableCell className="text-sm font-medium">Bs. {stats.totalInvestment.toFixed(2)}</TableCell>
-                            <TableCell className="text-sm font-medium">Bs. {stats.potentialSale.toFixed(2)}</TableCell>
-                            <TableCell className={`text-sm font-medium ${
+                            <TableCell className="text-xs">{product.stock_minimo}</TableCell>
+                            <TableCell className="text-xs">Bs. {stats.totalInvestment.toFixed(2)}</TableCell>
+                            <TableCell className="text-xs">Bs. {stats.potentialSale.toFixed(2)}</TableCell>
+                            <TableCell className={`text-xs font-medium ${
                               stats.potentialProfit > 0 ? 'text-green-600' : 'text-muted-foreground'
                             }`}>
                               Bs. {stats.potentialProfit.toFixed(2)}
@@ -1038,7 +899,7 @@ export default function Inventory() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleEdit(product)}
-                                  className="h-8 w-8 p-0"
+                                  className="h-7 w-7 p-0"
                                   disabled={isSubmitting}
                                 >
                                   <Pencil className="h-3 w-3" />
@@ -1047,7 +908,7 @@ export default function Inventory() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => setAddingStockProduct(product)}
-                                  className="h-8 w-8 p-0"
+                                  className="h-7 w-7 p-0"
                                   disabled={isSubmitting}
                                 >
                                   <PackagePlus className="h-3 w-3" />
@@ -1056,7 +917,7 @@ export default function Inventory() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => setDeletingProductId(product.idproducto)}
-                                  className="h-8 w-8 p-0"
+                                  className="h-7 w-7 p-0"
                                   disabled={isSubmitting}
                                 >
                                   <Trash2 className="h-3 w-3" />
