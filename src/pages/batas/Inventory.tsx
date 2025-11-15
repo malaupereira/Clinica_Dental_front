@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Plus, AlertTriangle, Pencil, Trash2, PackagePlus, Search, ChevronDown, ChevronUp, Package, TrendingUp, DollarSign, AlertCircle } from 'lucide-react';
+import { Plus, AlertTriangle, Pencil, Trash2, PackagePlus, Search, ChevronDown, ChevronUp, Package, TrendingUp, DollarSign, AlertCircle, ArrowUpDown } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getProducts, createProduct, updateProduct, deleteProduct, addStock, getProductStats, Product, ProductStats } from '@/api/InventoryApi';
 
 interface ProductFormData {
@@ -27,7 +28,24 @@ interface ProductFormData {
   precio_venta: string;
   stock: string;
   stock_minimo: string;
+  talla: string;
+  color: string;
+  customTalla?: string;
+  customColor?: string;
 }
+
+// Opciones para tallas
+const TALLA_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Otro'];
+
+// Opciones para colores (ordenados alfabéticamente)
+const COLOR_OPTIONS = [
+  'Api', 'Azul', 'Blanco', 'Celeste', 'Dorado', 'Fuxia', 'Guindo', 
+  'Lila', 'Marifl', 'Morado', 'Negro', 'Petroleo', 'Plomo', 'Rosa', 
+  'Turquesa', 'Verde', 'Verde Agua', 'Verde Esmeralda', 'Otro'
+];
+
+type SortField = 'nombre' | 'talla' | 'color' | 'stock' | 'precio_venta';
+type SortDirection = 'asc' | 'desc';
 
 export default function Inventory() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -47,12 +65,20 @@ export default function Inventory() {
   const [expandedProduct, setExpandedProduct] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sortField, setSortField] = useState<SortField>('nombre');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [colorFilter, setColorFilter] = useState<string>('all');
+  const [tallaFilter, setTallaFilter] = useState<string>('all');
+  const [colorSearch, setColorSearch] = useState('');
+  
   const [formData, setFormData] = useState<ProductFormData>({
     nombre: '',
     precio_compra: '',
     precio_venta: '',
     stock: '',
-    stock_minimo: ''
+    stock_minimo: '',
+    talla: 'na',
+    color: 'na'
   });
 
   // Cargar productos y estadísticas
@@ -100,24 +126,34 @@ export default function Inventory() {
     setLoading(true);
 
     try {
+      // Procesar talla
+      let tallaFinal = formData.talla === 'na' ? null : formData.talla;
+      if (formData.talla === 'Otro' && formData.customTalla) {
+        tallaFinal = formData.customTalla;
+      }
+
+      // Procesar color
+      let colorFinal = formData.color === 'na' ? null : formData.color;
+      if (formData.color === 'Otro' && formData.customColor) {
+        colorFinal = formData.customColor;
+      }
+
+      const productData = {
+        nombre: formData.nombre,
+        precio_compra: Number(formData.precio_compra) || 0,
+        precio_venta: Number(formData.precio_venta),
+        stock: Number(formData.stock) || 0,
+        stock_minimo: Number(formData.stock_minimo) || 0,
+        talla: tallaFinal,
+        color: colorFinal,
+      };
+
       if (editingProduct) {
-        await updateProduct(editingProduct.idproducto, {
-          nombre: formData.nombre,
-          precio_compra: Number(formData.precio_compra) || 0,
-          precio_venta: Number(formData.precio_venta),
-          stock: Number(formData.stock) || 0,
-          stock_minimo: Number(formData.stock_minimo) || 0,
-        });
+        await updateProduct(editingProduct.idproducto, productData);
         toast.success('Producto actualizado exitosamente');
         setEditingProduct(null);
       } else {
-        await createProduct({
-          nombre: formData.nombre,
-          precio_compra: Number(formData.precio_compra) || 0,
-          precio_venta: Number(formData.precio_venta),
-          stock: Number(formData.stock) || 0,
-          stock_minimo: Number(formData.stock_minimo) || 0,
-        });
+        await createProduct(productData);
         toast.success('Producto creado exitosamente');
       }
 
@@ -127,7 +163,9 @@ export default function Inventory() {
         precio_compra: '',
         precio_venta: '',
         stock: '',
-        stock_minimo: ''
+        stock_minimo: '',
+        talla: 'na',
+        color: 'na'
       });
       
       // Recargar datos
@@ -149,7 +187,9 @@ export default function Inventory() {
       precio_compra: product.precio_compra.toString(),
       precio_venta: product.precio_venta.toString(),
       stock: product.stock.toString(),
-      stock_minimo: product.stock_minimo.toString()
+      stock_minimo: product.stock_minimo.toString(),
+      talla: product.talla || 'na',
+      color: product.color || 'na'
     });
     setOpen(true);
   };
@@ -198,11 +238,48 @@ export default function Inventory() {
     }
   };
 
-  const filteredProducts = products.filter(product => 
-    product.nombre.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filtrar y ordenar productos
+  const filteredAndSortedProducts = products
+    .filter(product => {
+      const matchesSearch = product.nombre.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesColor = colorFilter === 'all' || 
+        (colorFilter === 'na' && !product.color) ||
+        (colorFilter !== 'all' && colorFilter !== 'na' && product.color === colorFilter);
+      const matchesTalla = tallaFilter === 'all' || 
+        (tallaFilter === 'na' && !product.talla) ||
+        (tallaFilter !== 'all' && tallaFilter !== 'na' && product.talla === tallaFilter);
+      
+      return matchesSearch && matchesColor && matchesTalla;
+    })
+    .sort((a, b) => {
+      let aValue: any = a[sortField];
+      let bValue: any = b[sortField];
+      
+      // Manejar valores nulos
+      if (aValue === null || aValue === undefined) aValue = '';
+      if (bValue === null || bValue === undefined) bValue = '';
+      
+      // Convertir a minúsculas para ordenación case-insensitive
+      if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+      if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+      
+      if (sortDirection === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      }
+    });
 
-  const lowStockProducts = filteredProducts.filter(product => product.stock <= product.stock_minimo);
+  const lowStockProducts = filteredAndSortedProducts.filter(product => product.stock <= product.stock_minimo);
+
+  // Obtener colores únicos para el filtro
+  const uniqueColors = [...new Set(products.map(p => p.color).filter(Boolean))] as string[];
+  const uniqueTallas = [...new Set(products.map(p => p.talla).filter(Boolean))] as string[];
+
+  // Filtrar opciones de color según búsqueda
+  const filteredColorOptions = COLOR_OPTIONS.filter(color => 
+    color.toLowerCase().includes(colorSearch.toLowerCase())
+  );
 
   const calculateProductStats = (product: Product) => {
     const margin = product.precio_venta - product.precio_compra;
@@ -220,8 +297,24 @@ export default function Inventory() {
     };
   };
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1" />;
+    return sortDirection === 'asc' ? 
+      <ChevronUp className="h-3 w-3 ml-1" /> : 
+      <ChevronDown className="h-3 w-3 ml-1" />;
+  };
+
   return (
-    <div className="container mx-auto p-3 sm:p-4 space-y-4 sm:space-y-6 max-w-7xl">
+    <div className="container mx-auto p-3 sm:p-4 space-y-4 sm:space-y-6 max-w-7xl h-full">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 sm:gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Inventario</h1>
@@ -237,7 +330,9 @@ export default function Inventory() {
               precio_compra: '',
               precio_venta: '',
               stock: '',
-              stock_minimo: ''
+              stock_minimo: '',
+              talla: 'na',
+              color: 'na'
             });
           }
         }}>
@@ -247,7 +342,7 @@ export default function Inventory() {
               Nuevo Producto
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-[95vw] sm:max-w-md rounded-lg mx-2 sm:mx-auto">
+          <DialogContent className="max-w-[95vw] sm:max-w-md rounded-lg mx-2 sm:mx-auto max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl">{editingProduct ? 'Editar Producto' : 'Crear Producto'}</DialogTitle>
             </DialogHeader>
@@ -262,6 +357,77 @@ export default function Inventory() {
                   required
                   disabled={isSubmitting}
                 />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm sm:text-base">Talla</Label>
+                  <Select 
+                    value={formData.talla} 
+                    onValueChange={(value) => setFormData({ ...formData, talla: value })}
+                    disabled={isSubmitting}
+                  >
+                    <SelectTrigger className="text-sm sm:text-base">
+                      <SelectValue placeholder="Seleccionar talla" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="na">NA</SelectItem>
+                      {TALLA_OPTIONS.map((talla) => (
+                        <SelectItem key={talla} value={talla}>
+                          {talla}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formData.talla === 'Otro' && (
+                    <Input
+                      value={formData.customTalla || ''}
+                      onChange={(e) => setFormData({ ...formData, customTalla: e.target.value })}
+                      placeholder="Especificar talla"
+                      className="text-sm sm:text-base mt-2"
+                      disabled={isSubmitting}
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm sm:text-base">Color</Label>
+                  <Select 
+                    value={formData.color} 
+                    onValueChange={(value) => setFormData({ ...formData, color: value })}
+                    disabled={isSubmitting}
+                  >
+                    <SelectTrigger className="text-sm sm:text-base">
+                      <SelectValue placeholder="Seleccionar color" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <div className="p-2">
+                        <Input
+                          placeholder="Buscar color..."
+                          value={colorSearch}
+                          onChange={(e) => setColorSearch(e.target.value)}
+                          className="text-sm mb-2"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <SelectItem value="na">NA</SelectItem>
+                      {filteredColorOptions.map((color) => (
+                        <SelectItem key={color} value={color}>
+                          {color}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formData.color === 'Otro' && (
+                    <Input
+                      value={formData.customColor || ''}
+                      onChange={(e) => setFormData({ ...formData, customColor: e.target.value })}
+                      placeholder="Especificar color"
+                      className="text-sm sm:text-base mt-2"
+                      disabled={isSubmitting}
+                    />
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -401,21 +567,88 @@ export default function Inventory() {
         </Card>
       </div>
 
-      <Card className="w-full">
+      <Card className="w-full flex-1">
         <CardHeader className="space-y-3 sm:space-y-4 p-4 sm:p-6">
           <CardTitle className="text-base sm:text-lg md:text-xl">Lista de Productos</CardTitle>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar producto..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 sm:pl-10 text-sm sm:text-base"
-              disabled={isSubmitting}
-            />
+          
+          {/* Filtros y búsqueda */}
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar producto..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 sm:pl-10 text-sm sm:text-base"
+                disabled={isSubmitting}
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Filtrar por Color</Label>
+                <Select value={colorFilter} onValueChange={setColorFilter}>
+                  <SelectTrigger className="text-xs h-8">
+                    <SelectValue placeholder="Todos los colores" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los colores</SelectItem>
+                    <SelectItem value="na">NA</SelectItem>
+                    {uniqueColors.sort().map((color) => (
+                      <SelectItem key={color} value={color}>{color}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-1">
+                <Label className="text-xs">Filtrar por Talla</Label>
+                <Select value={tallaFilter} onValueChange={setTallaFilter}>
+                  <SelectTrigger className="text-xs h-8">
+                    <SelectValue placeholder="Todas las tallas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las tallas</SelectItem>
+                    <SelectItem value="na">NA</SelectItem>
+                    {uniqueTallas.sort().map((talla) => (
+                      <SelectItem key={talla} value={talla}>{talla}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-1">
+                <Label className="text-xs">Ordenar por</Label>
+                <Select 
+                  value={`${sortField}-${sortDirection}`} 
+                  onValueChange={(value) => {
+                    const [field, direction] = value.split('-') as [SortField, SortDirection];
+                    setSortField(field);
+                    setSortDirection(direction);
+                  }}
+                >
+                  <SelectTrigger className="text-xs h-8">
+                    <SelectValue placeholder="Ordenar..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nombre-asc">Producto A-Z</SelectItem>
+                    <SelectItem value="nombre-desc">Producto Z-A</SelectItem>
+                    <SelectItem value="color-asc">Color A-Z</SelectItem>
+                    <SelectItem value="color-desc">Color Z-A</SelectItem>
+                    <SelectItem value="talla-asc">Talla A-Z</SelectItem>
+                    <SelectItem value="talla-desc">Talla Z-A</SelectItem>
+                    <SelectItem value="stock-desc">Stock (Mayor a menor)</SelectItem>
+                    <SelectItem value="stock-asc">Stock (Menor a mayor)</SelectItem>
+                    <SelectItem value="precio_venta-desc">Precio (Mayor a menor)</SelectItem>
+                    <SelectItem value="precio_venta-asc">Precio (Menor a mayor)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0 sm:p-2 md:p-6">
+        
+        <CardContent className="p-0 sm:p-2 md:p-6 pb-4">
           {/* Vista móvil - Cards colapsables */}
           <div className="sm:hidden space-y-2 p-2">
             {loading ? (
@@ -425,8 +658,8 @@ export default function Inventory() {
                   <div className="h-3 bg-gray-200 rounded w-1/2"></div>
                 </div>
               ))
-            ) : filteredProducts.length > 0 ? (
-              filteredProducts.map((product) => {
+            ) : filteredAndSortedProducts.length > 0 ? (
+              filteredAndSortedProducts.map((product) => {
                 const stats = calculateProductStats(product);
                 const isLowStock = product.stock <= product.stock_minimo;
                 
@@ -443,26 +676,26 @@ export default function Inventory() {
                     <div className="p-3">
                       <div className="flex justify-between items-start">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-medium text-sm truncate" title={product.nombre}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-medium text-sm break-words" title={product.nombre}>
                               {product.nombre}
                             </h3>
                             {isLowStock && (
                               <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
                             )}
                           </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className={`text-xs font-medium ${
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <span className={`font-medium ${
                               isLowStock ? 'text-amber-600' : 'text-foreground'
                             }`}>
                               Stock: {product.stock}
                             </span>
-                            <Badge 
-                              variant={stats.margin > 0 ? "default" : "secondary"}
-                              className="text-xs"
-                            >
-                              Margen: Bs. {stats.margin.toFixed(2)}
-                            </Badge>
+                            <span className="text-muted-foreground">
+                              Talla: {product.talla || 'NA'}
+                            </span>
+                            <span className="text-muted-foreground">
+                              Color: {product.color || 'NA'}
+                            </span>
                           </div>
                         </div>
                         <CollapsibleTrigger asChild>
@@ -562,125 +795,159 @@ export default function Inventory() {
               })
             ) : (
               <div className="text-center text-muted-foreground py-8 text-sm">
-                {searchQuery ? 'No se encontraron productos' : 'No hay productos registrados'}
+                {searchQuery || colorFilter !== 'all' || tallaFilter !== 'all' 
+                  ? 'No se encontraron productos con los filtros aplicados' 
+                  : 'No hay productos registrados'}
               </div>
             )}
           </div>
 
           {/* Vista desktop - Tabla completa */}
-          <div className="hidden sm:block overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-sm">Producto</TableHead>
-                  <TableHead className="text-sm">Compra (Bs.)</TableHead>
-                  <TableHead className="text-sm">Venta (Bs.)</TableHead>
-                  <TableHead className="text-sm">Margen (Bs.)</TableHead>
-                  <TableHead className="text-sm">Margen %</TableHead>
-                  <TableHead className="text-sm">Stock</TableHead>
-                  <TableHead className="text-sm">Mínimo</TableHead>
-                  <TableHead className="text-sm">Inversión (Bs.)</TableHead>
-                  <TableHead className="text-sm">Venta Potencial (Bs.)</TableHead>
-                  <TableHead className="text-sm">Utilidad (Bs.)</TableHead>
-                  <TableHead className="text-sm">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  [1, 2, 3].map((i) => (
-                    <TableRow key={i}>
-                      <TableCell><div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div></TableCell>
-                      <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
-                      <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
-                      <TableCell><div className="h-4 bg-gray-200 rounded w-12 animate-pulse"></div></TableCell>
-                      <TableCell><div className="h-4 bg-gray-200 rounded w-12 animate-pulse"></div></TableCell>
-                      <TableCell><div className="h-4 bg-gray-200 rounded w-12 animate-pulse"></div></TableCell>
-                      <TableCell><div className="h-4 bg-gray-200 rounded w-12 animate-pulse"></div></TableCell>
-                      <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
-                      <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
-                      <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
-                      <TableCell><div className="h-8 bg-gray-200 rounded w-24 animate-pulse"></div></TableCell>
-                    </TableRow>
-                  ))
-                ) : filteredProducts.length > 0 ? (
-                  filteredProducts.map((product) => {
-                    const stats = calculateProductStats(product);
-                    const isLowStock = product.stock <= product.stock_minimo;
-                    
-                    return (
-                      <TableRow key={product.idproducto}>
-                        <TableCell className="font-medium text-sm max-w-[200px] truncate" title={product.nombre}>
-                          <div className="flex items-center gap-2">
-                            {product.nombre}
-                            {isLowStock && (
-                              <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm">Bs. {product.precio_compra.toFixed(2)}</TableCell>
-                        <TableCell className="text-sm">Bs. {product.precio_venta.toFixed(2)}</TableCell>
-                        <TableCell className={`text-sm ${stats.margin > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
-                          Bs. {stats.margin.toFixed(2)}
-                        </TableCell>
-                        <TableCell className={`text-sm ${stats.marginPercentage > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
-                          {stats.marginPercentage.toFixed(1)}%
-                        </TableCell>
-                        <TableCell className={`text-sm font-medium ${
-                          isLowStock ? 'text-amber-600' : 'text-foreground'
-                        }`}>
-                          {product.stock}
-                        </TableCell>
-                        <TableCell className="text-sm">{product.stock_minimo}</TableCell>
-                        <TableCell className="text-sm font-medium">Bs. {stats.totalInvestment.toFixed(2)}</TableCell>
-                        <TableCell className="text-sm font-medium">Bs. {stats.potentialSale.toFixed(2)}</TableCell>
-                        <TableCell className={`text-sm font-medium ${
-                          stats.potentialProfit > 0 ? 'text-green-600' : 'text-muted-foreground'
-                        }`}>
-                          Bs. {stats.potentialProfit.toFixed(2)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEdit(product)}
-                              className="h-8 w-8 p-0"
-                              disabled={isSubmitting}
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setAddingStockProduct(product)}
-                              className="h-8 w-8 p-0"
-                              disabled={isSubmitting}
-                            >
-                              <PackagePlus className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setDeletingProductId(product.idproducto)}
-                              className="h-8 w-8 p-0"
-                              disabled={isSubmitting}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                ) : (
+          <div className="hidden sm:block">
+            <div className="overflow-x-auto max-h-[calc(100vh-400px)]">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center text-muted-foreground text-sm py-4">
-                      {searchQuery ? 'No se encontraron productos' : 'No hay productos registrados'}
-                    </TableCell>
+                    <TableHead className="text-sm cursor-pointer min-w-[200px]" onClick={() => handleSort('nombre')}>
+                      <div className="flex items-center">
+                        Producto
+                        {getSortIcon('nombre')}
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-sm cursor-pointer min-w-[80px]" onClick={() => handleSort('talla')}>
+                      <div className="flex items-center">
+                        Talla
+                        {getSortIcon('talla')}
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-sm cursor-pointer min-w-[100px]" onClick={() => handleSort('color')}>
+                      <div className="flex items-center">
+                        Color
+                        {getSortIcon('color')}
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-sm min-w-[100px]">Compra (Bs.)</TableHead>
+                    <TableHead className="text-sm min-w-[100px]">Venta (Bs.)</TableHead>
+                    <TableHead className="text-sm min-w-[90px]">Margen (Bs.)</TableHead>
+                    <TableHead className="text-sm min-w-[80px]">Margen %</TableHead>
+                    <TableHead className="text-sm cursor-pointer min-w-[80px]" onClick={() => handleSort('stock')}>
+                      <div className="flex items-center">
+                        Stock
+                        {getSortIcon('stock')}
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-sm min-w-[80px]">Mínimo</TableHead>
+                    <TableHead className="text-sm min-w-[110px]">Inversión (Bs.)</TableHead>
+                    <TableHead className="text-sm min-w-[120px]">Venta Potencial (Bs.)</TableHead>
+                    <TableHead className="text-sm min-w-[100px]">Utilidad (Bs.)</TableHead>
+                    <TableHead className="text-sm min-w-[120px]">Acciones</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    [1, 2, 3].map((i) => (
+                      <TableRow key={i}>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-12 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-12 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-12 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-12 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div></TableCell>
+                        <TableCell><div className="h-8 bg-gray-200 rounded w-24 animate-pulse"></div></TableCell>
+                      </TableRow>
+                    ))
+                  ) : filteredAndSortedProducts.length > 0 ? (
+                    filteredAndSortedProducts.map((product) => {
+                      const stats = calculateProductStats(product);
+                      const isLowStock = product.stock <= product.stock_minimo;
+                      
+                      return (
+                        <TableRow key={product.idproducto} className="hover:bg-muted/50">
+                          <TableCell className="font-medium text-sm min-w-[200px] max-w-[300px]">
+                            <div className="flex items-center gap-2">
+                              <div className="break-words whitespace-normal">
+                                {product.nombre}
+                              </div>
+                              {isLowStock && (
+                                <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm">{product.talla || 'NA'}</TableCell>
+                          <TableCell className="text-sm">{product.color || 'NA'}</TableCell>
+                          <TableCell className="text-sm">Bs. {product.precio_compra.toFixed(2)}</TableCell>
+                          <TableCell className="text-sm">Bs. {product.precio_venta.toFixed(2)}</TableCell>
+                          <TableCell className={`text-sm ${stats.margin > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
+                            Bs. {stats.margin.toFixed(2)}
+                          </TableCell>
+                          <TableCell className={`text-sm ${stats.marginPercentage > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
+                            {stats.marginPercentage.toFixed(1)}%
+                          </TableCell>
+                          <TableCell className={`text-sm font-medium ${
+                            isLowStock ? 'text-amber-600' : 'text-foreground'
+                          }`}>
+                            {product.stock}
+                          </TableCell>
+                          <TableCell className="text-sm">{product.stock_minimo}</TableCell>
+                          <TableCell className="text-sm font-medium">Bs. {stats.totalInvestment.toFixed(2)}</TableCell>
+                          <TableCell className="text-sm font-medium">Bs. {stats.potentialSale.toFixed(2)}</TableCell>
+                          <TableCell className={`text-sm font-medium ${
+                            stats.potentialProfit > 0 ? 'text-green-600' : 'text-muted-foreground'
+                          }`}>
+                            Bs. {stats.potentialProfit.toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEdit(product)}
+                                className="h-8 w-8 p-0"
+                                disabled={isSubmitting}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setAddingStockProduct(product)}
+                                className="h-8 w-8 p-0"
+                                disabled={isSubmitting}
+                              >
+                                <PackagePlus className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDeletingProductId(product.idproducto)}
+                                className="h-8 w-8 p-0"
+                                disabled={isSubmitting}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={13} className="text-center text-muted-foreground text-sm py-8">
+                        {searchQuery || colorFilter !== 'all' || tallaFilter !== 'all' 
+                          ? 'No se encontraron productos con los filtros aplicados' 
+                          : 'No hay productos registrados'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </CardContent>
       </Card>

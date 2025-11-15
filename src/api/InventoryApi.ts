@@ -9,6 +9,8 @@ interface BackendProduct {
   stock: number;
   stock_minimo: number;
   estado: number;
+  talla: string | null;
+  color: string | null;
 }
 
 export interface Product {
@@ -19,6 +21,8 @@ export interface Product {
   stock: number;
   stock_minimo: number;
   estado: number;
+  talla: string | null;
+  color: string | null;
 }
 
 export interface ProductRequest {
@@ -27,9 +31,10 @@ export interface ProductRequest {
   precio_venta: number;
   stock: number;
   stock_minimo: number;
+  talla?: string | null;
+  color?: string | null;
 }
 
-// Agregar la exportación de ProductStats
 export interface ProductStats {
   totalProducts: number;
   lowStockProducts: number;
@@ -57,6 +62,8 @@ export const getProducts = async (): Promise<Product[]> => {
       stock: product.stock,
       stock_minimo: product.stock_minimo,
       estado: product.estado,
+      talla: product.talla,
+      color: product.color,
     }));
   } catch (error) {
     console.error("Error fetching products:", error);
@@ -85,6 +92,8 @@ export const createProduct = async (
       precio_venta: product.precio_venta.toString(),
       stock: product.stock,
       stock_minimo: product.stock_minimo,
+      talla: product.talla || null,
+      color: product.color || null,
     });
     return mapBackendProduct(response.data);
   } catch (error: any) {
@@ -105,6 +114,8 @@ export const updateProduct = async (
       precio_venta: product.precio_venta.toString(),
       stock: product.stock,
       stock_minimo: product.stock_minimo,
+      talla: product.talla || null,
+      color: product.color || null,
     });
     return mapBackendProduct(response.data);
   } catch (error: any) {
@@ -146,5 +157,7 @@ function mapBackendProduct(product: BackendProduct): Product {
     stock: product.stock,
     stock_minimo: product.stock_minimo,
     estado: product.estado,
+    talla: product.talla,
+    color: product.color,
   };
 }
