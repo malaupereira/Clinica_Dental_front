@@ -25,6 +25,18 @@ interface CartItem {
   quantity: number;
 }
 
+interface Product {
+  id: string;
+  name: string;
+  purchasePrice: number;
+  salePrice: number;
+  stock: number;
+  minStock: number;
+  type: 'clinic' | 'batas';
+  talla?: string;
+  color?: string;
+}
+
 export default function RegisterSale() {
   const { products: contextProducts, refreshProducts, refreshBatasRecords, refreshTransactions } = useApp();
   const { user } = useAuth();
@@ -36,7 +48,7 @@ export default function RegisterSale() {
   const [discount, setDiscount] = useState<number>(0);
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
   const [loading, setLoading] = useState(false);
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,7 +84,8 @@ export default function RegisterSale() {
   }, [searchQuery]);
 
   const addToCart = (productId: string) => {
-    const product = [...products, ...searchResults].find(p => p.id === productId);
+    const allProducts = [...products, ...searchResults];
+    const product = allProducts.find(p => p.id === productId);
     if (!product || product.stock === 0) {
       toast.error('Producto sin stock');
       return;
@@ -106,19 +119,14 @@ export default function RegisterSale() {
     }, 100);
   };
 
-  const updateQuantity = (productId: string, delta: number) => {
+  const updateQuantity = (productId: string, newQuantity: number) => {
     const allProducts = [...products, ...searchResults];
     const product = allProducts.find(p => p.id === productId);
-    const item = cart.find(i => i.productId === productId);
     
-    if (!product || !item) return;
+    if (!product) return;
     
-    const newQuantity = item.quantity + delta;
-    
-    if (newQuantity <= 0) {
-      setCart(cart.filter(i => i.productId !== productId));
-      return;
-    }
+    // Si la cantidad es 0, no eliminamos del carrito pero bloqueamos el botón
+    if (newQuantity < 0) return;
     
     if (newQuantity > product.stock) {
       toast.error('No hay suficiente stock');
@@ -130,6 +138,30 @@ export default function RegisterSale() {
         ? { ...i, quantity: newQuantity }
         : i
     ));
+  };
+
+  const incrementQuantity = (productId: string) => {
+    const item = cart.find(i => i.productId === productId);
+    if (!item) return;
+    updateQuantity(productId, item.quantity + 1);
+  };
+
+  const decrementQuantity = (productId: string) => {
+    const item = cart.find(i => i.productId === productId);
+    if (!item) return;
+    updateQuantity(productId, item.quantity - 1);
+  };
+
+  const handleQuantityInputChange = (productId: string, value: string) => {
+    const numericValue = value === '' ? 0 : parseInt(value);
+    
+    if (isNaN(numericValue) || numericValue < 0) {
+      // Si no es un número válido, establecer en 0 pero mantener en carrito
+      updateQuantity(productId, 0);
+      return;
+    }
+    
+    updateQuantity(productId, numericValue);
   };
 
   const calculateSubtotal = () => {
@@ -177,6 +209,13 @@ export default function RegisterSale() {
     
     if (cart.length === 0) {
       toast.error('Agregue productos al carrito');
+      return;
+    }
+
+    // Verificar si hay productos con cantidad 0
+    const hasZeroQuantity = cart.some(item => item.quantity === 0);
+    if (hasZeroQuantity) {
+      toast.error('Hay productos con cantidad 0. Ajuste las cantidades antes de continuar.');
       return;
     }
 
@@ -272,6 +311,8 @@ export default function RegisterSale() {
   };
 
   const displayProducts = searchQuery ? searchResults : [];
+  const allProducts = [...products, ...searchResults];
+  const canCompleteSale = cart.length > 0 && !cart.some(item => item.quantity === 0);
 
   return (
     <div className="p-6 space-y-6">
@@ -308,9 +349,21 @@ export default function RegisterSale() {
                     displayProducts.map(product => (
                       <div key={product.id} className="p-4 border rounded-lg hover:border-primary transition-colors">
                         <div className="flex justify-between items-start mb-2">
-                          <div>
+                          <div className="flex-1">
                             <h3 className="font-semibold">{product.name}</h3>
-                            <p className="text-2xl font-bold text-primary">Bs. {product.salePrice}</p>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {product.talla && (
+                                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                                  Talla: {product.talla}
+                                </span>
+                              )}
+                              {product.color && (
+                                <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                                  Color: {product.color}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-2xl font-bold text-primary mt-2">Bs. {product.salePrice}</p>
                           </div>
                           <span className="px-2 py-1 bg-muted rounded text-sm">
                             Stock: {product.stock}
@@ -354,13 +407,26 @@ export default function RegisterSale() {
                 ) : (
                   <div className="space-y-3">
                     {cart.map(item => {
-                      const allProducts = [...products, ...searchResults];
                       const product = allProducts.find(p => p.id === item.productId);
                       if (!product) return null;
                       return (
                         <div key={item.productId} className="p-3 bg-muted rounded-lg">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="font-medium text-sm">{product.name}</span>
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex-1">
+                              <span className="font-medium text-sm block">{product.name}</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {product.talla && (
+                                  <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                                    Talla: {product.talla}
+                                  </span>
+                                )}
+                                {product.color && (
+                                  <span className="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-xs">
+                                    Color: {product.color}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                             <span className="font-bold">Bs. {(product.salePrice * item.quantity).toFixed(2)}</span>
                           </div>
                           <div className="flex items-center justify-between">
@@ -370,17 +436,25 @@ export default function RegisterSale() {
                                 size="icon"
                                 variant="outline"
                                 className="h-8 w-8"
-                                onClick={() => updateQuantity(item.productId, -1)}
+                                onClick={() => decrementQuantity(item.productId)}
                               >
                                 <Minus className="h-3 w-3" />
                               </Button>
-                              <span className="w-8 text-center font-medium">{item.quantity}</span>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={item.quantity === 0 ? '' : item.quantity}
+                                onChange={(e) => handleQuantityInputChange(item.productId, e.target.value)}
+                                onWheel={(e) => e.currentTarget.blur()}
+                                className="w-16 h-8 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                placeholder="0"
+                              />
                               <Button
                                 type="button"
                                 size="icon"
                                 variant="outline"
                                 className="h-8 w-8"
-                                onClick={() => updateQuantity(item.productId, 1)}
+                                onClick={() => incrementQuantity(item.productId)}
                               >
                                 <Plus className="h-3 w-3" />
                               </Button>
@@ -389,6 +463,11 @@ export default function RegisterSale() {
                               Bs. {product.salePrice} c/u
                             </span>
                           </div>
+                          {item.quantity === 0 && (
+                            <div className="mt-2 text-xs text-red-600 font-medium">
+                              Cantidad en 0 - Ajuste para habilitar la venta
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -499,7 +578,7 @@ export default function RegisterSale() {
                     type="submit" 
                     className="w-full" 
                     size="lg" 
-                    disabled={cart.length === 0 || loading || isSubmitting}
+                    disabled={!canCompleteSale || loading || isSubmitting}
                   >
                     {loading ? 'Procesando...' : 'Completar Venta'}
                   </Button>
@@ -522,7 +601,6 @@ export default function RegisterSale() {
               <strong>Productos:</strong>
               <ul className="list-disc list-inside mt-2">
                 {cart.map(item => {
-                  const allProducts = [...products, ...searchResults];
                   const product = allProducts.find(p => p.id === item.productId);
                   return product ? (
                     <li key={item.productId}>

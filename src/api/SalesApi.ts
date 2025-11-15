@@ -9,6 +9,8 @@ interface BackendProduct {
   stock: number;
   stock_minimo: number;
   estado: number;
+  talla?: string;
+  color?: string;
 }
 
 export interface Product {
@@ -18,7 +20,9 @@ export interface Product {
   salePrice: number;
   stock: number;
   minStock: number;
-  type: 'clinic' | 'batas'; // Mantenemos el type pero lo determinamos lógicamente
+  type: 'clinic' | 'batas';
+  talla?: string;
+  color?: string;
 }
 
 export interface SaleRequest {
@@ -59,7 +63,9 @@ export const getProducts = async (): Promise<Product[]> => {
       salePrice: parseFloat(product.precio_venta),
       stock: product.stock,
       minStock: product.stock_minimo,
-      type: 'batas' // Por defecto todos los productos son de tipo batas para Dr.Dress
+      type: 'batas',
+      talla: product.talla || undefined,
+      color: product.color || undefined
     }));
   } catch (error) {
     console.error("Error fetching products:", error);
@@ -77,7 +83,9 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
       salePrice: parseFloat(product.precio_venta),
       stock: product.stock,
       minStock: product.stock_minimo,
-      type: 'batas' // Por defecto todos los productos son de tipo batas para Dr.Dress
+      type: 'batas',
+      talla: product.talla || undefined,
+      color: product.color || undefined
     }));
   } catch (error) {
     console.error("Error searching products:", error);
