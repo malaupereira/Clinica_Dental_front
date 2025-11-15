@@ -651,7 +651,7 @@ export default function Inventory() {
           
           <CardContent className="p-0 sm:p-2 lg:p-6">
             {/* Vista móvil - Cards colapsables */}
-            <div className="block sm:hidden space-y-2 p-2">
+            <div className="block md:hidden space-y-2 p-2">
               {loading ? (
                 [1, 2, 3].map((i) => (
                   <div key={i} className="border rounded-lg p-3 animate-pulse">
@@ -803,10 +803,139 @@ export default function Inventory() {
               )}
             </div>
 
-            {/* Vista tablet y desktop - Tabla completa */}
-            <div className="hidden sm:block w-full">
-              <div className="w-full overflow-hidden">
-                <Table className="w-full table-auto">
+            {/* Vista tablet - Tabla simplificada */}
+            <div className="hidden md:block lg:hidden w-full">
+              <div className="w-full overflow-x-auto">
+                <Table className="w-full min-w-[800px]">
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className="text-sm font-bold cursor-pointer" onClick={() => handleSort('nombre')}>
+                        <div className="flex items-center">
+                          Producto
+                          {getSortIcon('nombre')}
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-sm font-bold">Talla/Color</TableHead>
+                      <TableHead className="text-sm font-bold">Precios</TableHead>
+                      <TableHead className="text-sm font-bold cursor-pointer" onClick={() => handleSort('stock')}>
+                        <div className="flex items-center">
+                          Stock
+                          {getSortIcon('stock')}
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-sm font-bold">Finanzas</TableHead>
+                      <TableHead className="text-sm font-bold text-center">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      [1, 2, 3].map((i) => (
+                        <TableRow key={i}>
+                          <TableCell><div className="h-4 bg-gray-200 rounded w-full animate-pulse"></div></TableCell>
+                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
+                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
+                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
+                          <TableCell><div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div></TableCell>
+                          <TableCell><div className="h-8 bg-gray-200 rounded w-full animate-pulse"></div></TableCell>
+                        </TableRow>
+                      ))
+                    ) : filteredAndSortedProducts.length > 0 ? (
+                      filteredAndSortedProducts.map((product) => {
+                        const stats = calculateProductStats(product);
+                        const isLowStock = product.stock <= product.stock_minimo;
+                        
+                        return (
+                          <TableRow key={product.idproducto} className="hover:bg-muted/30">
+                            <TableCell className="font-medium text-sm">
+                              <div className="flex items-center gap-2">
+                                <div className="break-words whitespace-normal max-w-[150px]">
+                                  {product.nombre}
+                                </div>
+                                {isLowStock && (
+                                  <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <div>Talla: {product.talla || 'NA'}</div>
+                              <div>Color: {product.color || 'NA'}</div>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <div>Compra: Bs. {product.precio_compra.toFixed(2)}</div>
+                              <div>Venta: Bs. {product.precio_venta.toFixed(2)}</div>
+                              <div className={`text-xs ${stats.margin > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                                Margen: Bs. {stats.margin.toFixed(2)}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <div className={`font-medium ${
+                                isLowStock ? 'text-amber-600' : 'text-foreground'
+                              }`}>
+                                {product.stock}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Mín: {product.stock_minimo}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <div>Inversión: Bs. {stats.totalInvestment.toFixed(2)}</div>
+                              <div>Venta: Bs. {stats.potentialSale.toFixed(2)}</div>
+                              <div className={`text-xs ${stats.potentialProfit > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                                Utilidad: Bs. {stats.potentialProfit.toFixed(2)}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1 justify-center">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEdit(product)}
+                                  className="h-8 w-8 p-0"
+                                  disabled={isSubmitting}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setAddingStockProduct(product)}
+                                  className="h-8 w-8 p-0"
+                                  disabled={isSubmitting}
+                                >
+                                  <PackagePlus className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setDeletingProductId(product.idproducto)}
+                                  className="h-8 w-8 p-0"
+                                  disabled={isSubmitting}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground text-sm py-8">
+                          {searchQuery || colorFilter !== 'all' || tallaFilter !== 'all' 
+                            ? 'No se encontraron productos con los filtros aplicados' 
+                            : 'No hay productos registrados'}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {/* Vista desktop completa - Tabla completa */}
+            <div className="hidden lg:block w-full">
+              <div className="w-full overflow-x-auto">
+                <Table className="w-full min-w-[1200px]">
                   <TableHeader className="bg-muted/50">
                     <TableRow>
                       <TableHead className="text-sm font-bold cursor-pointer w-[25%] min-w-[250px]" onClick={() => handleSort('nombre')}>
