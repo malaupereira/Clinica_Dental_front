@@ -77,6 +77,21 @@ export default function Expenses() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastSubmission, setLastSubmission] = useState<{timestamp: number, data: any} | null>(null);
 
+  // Función para formatear la fecha ISO a un formato legible sin cambiar la hora
+  const formatDateDisplay = (isoString: string) => {
+    // Extraer directamente del string ISO sin convertir zonas horarias
+    const date = new Date(isoString);
+    
+    // Usar los componentes UTC para mantener la hora original
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+  };
+
   // Cargar doctores al montar el componente
   useEffect(() => {
     const loadDoctors = async () => {
@@ -623,8 +638,7 @@ export default function Expenses() {
   const renderExpenseRow = (expense: any, isCompleted = false) => (
     <TableRow key={expense.id}>
       <TableCell className="py-2">
-        <div className="text-sm">{format(new Date(expense.createdDate || expense.date), 'dd/MM/yyyy')}</div>
-        <div className="text-xs text-muted-foreground">{format(new Date(expense.createdDate || expense.date), 'HH:mm')}</div>
+        <div className="text-sm">{formatDateDisplay(expense.createdDate || expense.date)}</div>
       </TableCell>
       <TableCell className="py-2">
         <Badge variant="outline" className="text-xs">
@@ -671,7 +685,7 @@ export default function Expenses() {
             <h3 className="font-medium text-sm truncate" title={expense.type}>{expense.type}</h3>
             <div className="mt-1">
               <span className="text-xs text-muted-foreground">
-                {format(new Date(expense.createdDate || expense.date), 'dd/MM/yy')}
+                {formatDateDisplay(expense.createdDate || expense.date)}
               </span>
             </div>
           </div>
@@ -690,7 +704,7 @@ export default function Expenses() {
         <div className="grid grid-cols-2 gap-3 text-xs mt-2">
           <div>
             <span className="text-muted-foreground">Fecha completa:</span>
-            <p className="font-medium">{format(new Date(expense.createdDate || expense.date), 'dd/MM/yyyy HH:mm')}</p>
+            <p className="font-medium">{formatDateDisplay(expense.createdDate || expense.date)}</p>
           </div>
           <div>
             <span className="text-muted-foreground">Categoría:</span>
@@ -928,7 +942,7 @@ export default function Expenses() {
                                   {data.expenses.map((expense) => (
                                     <TableRow key={expense.id}>
                                       <TableCell className="py-2 text-xs">
-                                        {format(new Date(expense.createdDate || expense.date), 'dd/MM/yyyy')}
+                                        {formatDateDisplay(expense.createdDate || expense.date)}
                                       </TableCell>
                                       <TableCell className="py-2 text-xs font-medium">Bs. {expense.amount.toFixed(2)}</TableCell>
                                       <TableCell className="py-2">{getStatusBadge(expense)}</TableCell>
@@ -985,7 +999,7 @@ export default function Expenses() {
                         {data.expenses.map((expense) => (
                           <div key={expense.id} className="flex justify-between items-center border rounded p-2">
                             <div>
-                              <div className="text-xs">{format(new Date(expense.createdDate || expense.date), 'dd/MM/yyyy')}</div>
+                              <div className="text-xs">{formatDateDisplay(expense.createdDate || expense.date)}</div>
                               <div className="text-sm font-medium">Bs. {expense.amount.toFixed(2)}</div>
                               {getStatusBadge(expense)}
                             </div>
@@ -1154,7 +1168,7 @@ export default function Expenses() {
                     <h3 className="font-medium text-sm truncate" title={expense.type}>{expense.type}</h3>
                     <div className="mt-1">
                       <span className="text-xs text-muted-foreground">
-                        {format(new Date(expense.createdDate || expense.date), 'dd/MM/yy')}
+                        {formatDateDisplay(expense.createdDate || expense.date)}
                       </span>
                     </div>
                   </div>
@@ -1277,7 +1291,7 @@ export default function Expenses() {
             <div className="bg-muted p-3 rounded-lg">
               <p className="text-sm sm:text-base"><strong>Doctor:</strong> {commissionToEdit?.doctor}</p>
               <p className="text-sm sm:text-base">
-                <strong>Fecha:</strong> {commissionToEdit ? format(new Date(commissionToEdit.createdDate || commissionToEdit.date), 'dd/MM/yyyy') : ''}
+                <strong>Fecha:</strong> {commissionToEdit ? formatDateDisplay(commissionToEdit.createdDate || commissionToEdit.date) : ''}
               </p>
             </div>
             <div className="space-y-2">
