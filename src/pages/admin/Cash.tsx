@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfDay, endOfDay, startOfWeek, endOfWeek, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { TrendingUp, TrendingDown, Wallet, CalendarIcon, FilterX, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -32,15 +32,20 @@ interface CombinedMovement {
   tipo?: string;
 }
 
+interface DateFilterParams {
+  startDate?: string;
+  endDate?: string;
+}
+
 export default function Cash() {
   const { toast } = useToast();
   const [cashBoxes, setCashBoxes] = useState<CashBox[]>([]);
   const [selectedCashBoxId, setSelectedCashBoxId] = useState<string>('1');
-  const [dateFilter, setDateFilter] = useState<'specific' | 'range'>('specific');
-  const [specificDate, setSpecificDate] = useState<Date>(new Date());
+  const [dateFilter, setDateFilter] = useState<'specific' | 'range' | 'today' | 'yesterday' | 'thisWeek' | 'currentMonth'>('today');
+  const [specificDate, setSpecificDate] = useState<Date>();
   const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
-    from: new Date(),
-    to: new Date(),
+    from: undefined,
+    to: undefined,
   });
   const [expandedMovement, setExpandedMovement] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,12 +58,70 @@ export default function Cash() {
   });
   const [movements, setMovements] = useState<CombinedMovement[]>([]);
 
+  // Función para construir los parámetros de fecha para el backend
+  const buildDateParams = (): DateFilterParams => {
+    if (dateFilter === 'today') {
+      const start = startOfDay(new Date());
+      const end = endOfDay(new Date());
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    if (dateFilter === 'yesterday') {
+      const yesterday = subDays(new Date(), 1);
+      const start = startOfDay(yesterday);
+      const end = endOfDay(yesterday);
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    if (dateFilter === 'thisWeek') {
+      const start = startOfWeek(new Date(), { weekStartsOn: 1 }); // Lunes como inicio de semana
+      const end = endOfWeek(new Date(), { weekStartsOn: 1 });
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    if (dateFilter === 'currentMonth') {
+      const start = startOfMonth(new Date());
+      const end = endOfMonth(new Date());
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    if (dateFilter === 'specific' && specificDate) {
+      const start = startOfDay(specificDate);
+      const end = endOfDay(specificDate);
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    if (dateFilter === 'range' && dateRange.from && dateRange.to) {
+      const start = startOfDay(dateRange.from);
+      const end = endOfDay(dateRange.to);
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    return {};
+  };
+
   // Función para formatear la fecha ISO a un formato legible sin cambiar la hora
   const formatDateDisplay = (isoString: string) => {
-    // Extraer directamente del string ISO sin convertir zonas horarias
     const date = new Date(isoString);
     
-    // Usar los componentes UTC para mantener la hora original
     const year = date.getUTCFullYear();
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
     const day = String(date.getUTCDate()).padStart(2, '0');
@@ -78,7 +141,7 @@ export default function Cash() {
     if (cashBoxes.length > 0) {
       loadCashData();
     }
-  }, [selectedCashBoxId, specificDate, dateRange, dateFilter, cashBoxes]);
+  }, [selectedCashBoxId, dateFilter, specificDate, dateRange, cashBoxes]);
 
   const loadCashBoxes = async () => {
     try {
@@ -98,19 +161,17 @@ export default function Cash() {
     setLoading(true);
     try {
       const idcaja = parseInt(selectedCashBoxId);
+      const dateParams = buildDateParams();
       
-      // Preparar parámetros de fecha
+      // Preparar parámetros de fecha para el backend actual
       let fecha: string | undefined;
       let fechaInicio: string | undefined;
       let fechaFin: string | undefined;
 
-      if (dateFilter === 'specific' && specificDate) {
-        fecha = format(specificDate, 'yyyy-MM-dd');
-      } else if (dateFilter === 'range' && dateRange.from && dateRange.to) {
-        fechaInicio = format(dateRange.from, 'yyyy-MM-dd');
-        fechaFin = format(dateRange.to, 'yyyy-MM-dd');
+      if (dateParams.startDate && dateParams.endDate) {
+        fechaInicio = format(new Date(dateParams.startDate), 'yyyy-MM-dd');
+        fechaFin = format(new Date(dateParams.endDate), 'yyyy-MM-dd');
       }
-      // Si no hay filtros específicos, se usa el día actual por defecto en el backend
 
       // Cargar resumen y movimientos en paralelo
       const [summaryData, movementsData] = await Promise.all([
@@ -162,11 +223,13 @@ export default function Cash() {
   };
 
   const clearFilters = () => {
-    setSpecificDate(new Date());
-    setDateRange({ from: new Date(), to: new Date() });
+    setDateFilter('today');
+    setSpecificDate(undefined);
+    setDateRange({ from: undefined, to: undefined });
   };
 
-  const hasActiveFilters = specificDate || (dateRange.from && dateRange.to);
+  const hasActiveFilters = dateFilter !== 'today' || specificDate || 
+    (dateRange.from && dateRange.to);
 
   const getCashBoxName = (idcaja: number) => {
     const box = cashBoxes.find(b => b.idcaja === idcaja);
@@ -214,11 +277,15 @@ export default function Cash() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <Select value={dateFilter} onValueChange={(value: 'specific' | 'range') => setDateFilter(value)}>
+            <Select value={dateFilter} onValueChange={(value: 'specific' | 'range' | 'today' | 'yesterday' | 'thisWeek' | 'currentMonth') => setDateFilter(value)}>
               <SelectTrigger className="w-full text-sm sm:text-base">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="today">Hoy</SelectItem>
+                <SelectItem value="yesterday">Ayer</SelectItem>
+                <SelectItem value="thisWeek">Esta semana</SelectItem>
+                <SelectItem value="currentMonth">Mes actual</SelectItem>
                 <SelectItem value="specific">Día específico</SelectItem>
                 <SelectItem value="range">Rango de fechas</SelectItem>
               </SelectContent>
