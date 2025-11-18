@@ -86,14 +86,17 @@ export default function Records() {
     }
   };
 
-  // Función para formatear la fecha ISO a un formato legible
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
+  // Función para formatear la fecha ISO a un formato legible sin cambiar la hora
+  const formatDateDisplay = (isoString: string) => {
+    // Extraer directamente del string ISO sin convertir zonas horarias
+    const date = new Date(isoString);
+    
+    // Usar los componentes UTC para mantener la hora original
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
     
     return `${day}/${month}/${year} ${hours}:${minutes}`;
   };
@@ -414,7 +417,7 @@ export default function Records() {
                         </h3>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs text-muted-foreground">
-                            {formatDate(record.fecha)}
+                            {formatDateDisplay(record.fecha)}
                           </span>
                           {getPaymentMethodBadge(record.metodo_pago)}
                         </div>
@@ -508,7 +511,7 @@ export default function Records() {
                     <React.Fragment key={record.id}>
                       <TableRow>
                         <TableCell className="text-sm">
-                          {formatDate(record.fecha)}
+                          {formatDateDisplay(record.fecha)}
                         </TableCell>
                         <TableCell className="text-sm">
                           {record.usuario_nombre || 'N/A'}
