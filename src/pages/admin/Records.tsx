@@ -7,13 +7,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format, startOfMonth, endOfMonth, startOfDay, endOfDay } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfDay, endOfDay, startOfWeek, endOfWeek, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, FilterX, ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
-import { getClinicRecords, getBatasRecords, getClinicRecordDetails, getBatasRecordDetails, ClinicRecord, BatasRecord, ClinicDetail, BatasDetail } from '@/api/RecordsApi';
+import { getClinicRecordDetails, getBatasRecordDetails, ClinicRecord, BatasRecord, ClinicDetail, BatasDetail } from '@/api/RecordsApi';
+
+// Importar axios para hacer las llamadas directamente
+import axios from "axios";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 interface Transaction {
   id: string;
@@ -28,11 +32,90 @@ interface Transaction {
   patient?: string; 
 }
 
+// Interfaces para las respuestas del backend
+interface BackendClinicRecord {
+  idregistro_clinica: number;
+  fecha: string;
+  idusuario: number;
+  paciente: string;
+  detalles: string;
+  metodo_pago: string;
+  monto_total: string;
+  monto_efectivo: string;
+  monto_qr: string;
+  usuario_nombre?: string;
+}
+
+interface BackendBatasRecord {
+  idregistro_batas: number;
+  fecha: string;
+  idusuario: number;
+  detalles: string;
+  metodo_pago: string;
+  monto_total: string;
+  monto_efectivo: string;
+  monto_qr: string;
+  usuario_nombre?: string;
+}
+
+interface DateFilterParams {
+  startDate?: string;
+  endDate?: string;
+}
+
+// Funciones wrapper con tipos explícitos
+const fetchClinicRecords = async (dateParams?: DateFilterParams): Promise<ClinicRecord[]> => {
+  try {
+    const response = await axios.get<BackendClinicRecord[]>(`${API_URL}/records/clinic`, {
+      params: dateParams,
+      withCredentials: true
+    });
+    return response.data.map((record) => ({
+      id: record.idregistro_clinica.toString(),
+      fecha: record.fecha,
+      idusuario: record.idusuario,
+      paciente: record.paciente,
+      detalles: record.detalles,
+      metodo_pago: record.metodo_pago as 'Efectivo' | 'QR' | 'Mixto',
+      monto_total: parseFloat(record.monto_total),
+      monto_efectivo: parseFloat(record.monto_efectivo),
+      monto_qr: parseFloat(record.monto_qr),
+      usuario_nombre: record.usuario_nombre
+    }));
+  } catch (error) {
+    console.error("Error fetching clinic records:", error);
+    throw new Error("No se pudieron cargar los registros de Dental Studio");
+  }
+};
+
+const fetchBatasRecords = async (dateParams?: DateFilterParams): Promise<BatasRecord[]> => {
+  try {
+    const response = await axios.get<BackendBatasRecord[]>(`${API_URL}/records/batas`, {
+      params: dateParams,
+      withCredentials: true
+    });
+    return response.data.map((record) => ({
+      id: record.idregistro_batas.toString(),
+      fecha: record.fecha,
+      idusuario: record.idusuario,
+      detalles: record.detalles,
+      metodo_pago: record.metodo_pago as 'Efectivo' | 'QR' | 'Mixto',
+      monto_total: parseFloat(record.monto_total),
+      monto_efectivo: parseFloat(record.monto_efectivo),
+      monto_qr: parseFloat(record.monto_qr),
+      usuario_nombre: record.usuario_nombre
+    }));
+  } catch (error) {
+    console.error("Error fetching batas records:", error);
+    throw new Error("No se pudieron cargar los registros de Dr.Dress");
+  }
+};
+
 export default function Records() {
   const { transactions } = useApp();
   const { user } = useAuth();
   const [filter, setFilter] = useState<'clinic' | 'batas'>('clinic');
-  const [dateFilter, setDateFilter] = useState<'specific' | 'range' | 'today' | 'currentMonth'>('today');
+  const [dateFilter, setDateFilter] = useState<'specific' | 'range' | 'today' | 'yesterday' | 'thisWeek' | 'currentMonth'>('today');
   const [specificDate, setSpecificDate] = useState<Date>();
   const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
     from: undefined,
@@ -44,26 +127,90 @@ export default function Records() {
   const [recordDetails, setRecordDetails] = useState<{ [key: string]: ClinicDetail[] | BatasDetail[] }>({});
   const [loading, setLoading] = useState(false);
 
-  // Cargar registros al cambiar el filtro
-  useEffect(() => {
-    const loadRecords = async () => {
-      setLoading(true);
-      try {
-        if (filter === 'clinic') {
-          const records = await getClinicRecords();
-          setClinicRecords(records);
-        } else {
-          const records = await getBatasRecords();
-          setBatasRecords(records);
-        }
-      } catch (error) {
-        console.error('Error loading records:', error);
-      } finally {
-        setLoading(false);
+  // Función para construir los parámetros de fecha para el backend
+  const buildDateParams = (): DateFilterParams => {
+    if (dateFilter === 'today') {
+      const start = startOfDay(new Date());
+      const end = endOfDay(new Date());
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    if (dateFilter === 'yesterday') {
+      const yesterday = subDays(new Date(), 1);
+      const start = startOfDay(yesterday);
+      const end = endOfDay(yesterday);
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    if (dateFilter === 'thisWeek') {
+      const start = startOfWeek(new Date(), { weekStartsOn: 1 }); // Lunes como inicio de semana
+      const end = endOfWeek(new Date(), { weekStartsOn: 1 });
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    if (dateFilter === 'currentMonth') {
+      const start = startOfMonth(new Date());
+      const end = endOfMonth(new Date());
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    if (dateFilter === 'specific' && specificDate) {
+      const start = startOfDay(specificDate);
+      const end = endOfDay(specificDate);
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    if (dateFilter === 'range' && dateRange.from && dateRange.to) {
+      const start = startOfDay(dateRange.from);
+      const end = endOfDay(dateRange.to);
+      return {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      };
+    }
+    
+    return {};
+  };
+
+  // Cargar registros con filtros aplicados
+  const loadRecords = async () => {
+    setLoading(true);
+    try {
+      const dateParams = buildDateParams();
+      
+      if (filter === 'clinic') {
+        const records = await fetchClinicRecords(dateParams);
+        setClinicRecords(records);
+      } else {
+        const records = await fetchBatasRecords(dateParams);
+        setBatasRecords(records);
       }
-    };
+    } catch (error) {
+      console.error('Error loading records:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cargar registros al cambiar el filtro o los parámetros de fecha
+  useEffect(() => {
     loadRecords();
-  }, [filter]);
+  }, [filter, dateFilter, specificDate, dateRange]);
 
   // Cargar detalles de un registro cuando se expande
   const loadRecordDetails = async (recordId: string, isClinic: boolean) => {
@@ -88,10 +235,8 @@ export default function Records() {
 
   // Función para formatear la fecha ISO a un formato legible sin cambiar la hora
   const formatDateDisplay = (isoString: string) => {
-    // Extraer directamente del string ISO sin convertir zonas horarias
     const date = new Date(isoString);
     
-    // Usar los componentes UTC para mantener la hora original
     const year = date.getUTCFullYear();
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
     const day = String(date.getUTCDate()).padStart(2, '0');
@@ -101,40 +246,8 @@ export default function Records() {
     return `${day}/${month}/${year} ${hours}:${minutes}`;
   };
 
-  // Función para filtrar por fecha
-  const filterByDate = (date: string) => {
-    const itemDate = new Date(date);
-    
-    if (dateFilter === 'today') {
-      const start = startOfDay(new Date());
-      const end = endOfDay(new Date());
-      return itemDate >= start && itemDate <= end;
-    }
-    
-    if (dateFilter === 'currentMonth') {
-      const start = startOfMonth(new Date());
-      const end = endOfMonth(new Date());
-      return itemDate >= start && itemDate <= end;
-    }
-    
-    if (dateFilter === 'specific' && specificDate) {
-      return (
-        itemDate.getDate() === specificDate.getDate() &&
-        itemDate.getMonth() === specificDate.getMonth() &&
-        itemDate.getFullYear() === specificDate.getFullYear()
-      );
-    }
-    
-    if (dateFilter === 'range' && dateRange.from && dateRange.to) {
-      return itemDate >= dateRange.from && itemDate <= dateRange.to;
-    }
-    
-    return true;
-  };
-
   const currentRecords = filter === 'clinic' ? clinicRecords : batasRecords;
-  
-  const filteredRecords = currentRecords.filter(record => filterByDate(record.fecha));
+  const filteredRecords = currentRecords; // Ya vienen filtrados del backend
 
   // Calcular totales
   const total = filteredRecords.reduce((sum, record) => sum + record.monto_total, 0);
@@ -248,12 +361,14 @@ export default function Records() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <Select value={dateFilter} onValueChange={(value: 'specific' | 'range' | 'today' | 'currentMonth') => setDateFilter(value)}>
+            <Select value={dateFilter} onValueChange={(value: 'specific' | 'range' | 'today' | 'yesterday' | 'thisWeek' | 'currentMonth') => setDateFilter(value)}>
               <SelectTrigger className="w-full text-sm sm:text-base">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="today">Hoy</SelectItem>
+                <SelectItem value="yesterday">Ayer</SelectItem>
+                <SelectItem value="thisWeek">Esta semana</SelectItem>
                 <SelectItem value="currentMonth">Mes actual</SelectItem>
                 <SelectItem value="specific">Día específico</SelectItem>
                 <SelectItem value="range">Rango de fechas</SelectItem>
