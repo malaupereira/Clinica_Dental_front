@@ -202,7 +202,7 @@ export default function Records() {
                 <div className="text-xs text-muted-foreground">Bs. {detail.precio_unitario.toFixed(2)} c/u</div>
               </div>
             </div>
-          ))};
+          ))}
         </div>
       );
     }
@@ -402,7 +402,7 @@ export default function Records() {
                         </h3>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs text-muted-foreground">
-                            {format(new Date(record.fecha), 'dd/MM/yy HH:mm')}
+                            {record.fecha}
                           </span>
                           {getPaymentMethodBadge(record.metodo_pago)}
                         </div>
@@ -496,7 +496,7 @@ export default function Records() {
                     <React.Fragment key={record.id}>
                       <TableRow>
                         <TableCell className="text-sm">
-                          {format(new Date(record.fecha), 'dd/MM/yyyy HH:mm')}
+                          {record.fecha}
                         </TableCell>
                         <TableCell className="text-sm">
                           {record.usuario_nombre || 'N/A'}
