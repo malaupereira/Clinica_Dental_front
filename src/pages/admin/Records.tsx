@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfDay, endOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, FilterX, ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -32,11 +32,11 @@ export default function Records() {
   const { transactions } = useApp();
   const { user } = useAuth();
   const [filter, setFilter] = useState<'clinic' | 'batas'>('clinic');
-  const [dateFilter, setDateFilter] = useState<'specific' | 'range' | 'currentMonth'>('currentMonth');
+  const [dateFilter, setDateFilter] = useState<'specific' | 'range' | 'today' | 'currentMonth'>('today');
   const [specificDate, setSpecificDate] = useState<Date>();
   const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
-    from: startOfMonth(new Date()),
-    to: endOfMonth(new Date()),
+    from: undefined,
+    to: undefined,
   });
   const [expandedTransaction, setExpandedTransaction] = useState<string | null>(null);
   const [clinicRecords, setClinicRecords] = useState<ClinicRecord[]>([]);
@@ -105,6 +105,12 @@ export default function Records() {
   const filterByDate = (date: string) => {
     const itemDate = new Date(date);
     
+    if (dateFilter === 'today') {
+      const start = startOfDay(new Date());
+      const end = endOfDay(new Date());
+      return itemDate >= start && itemDate <= end;
+    }
+    
     if (dateFilter === 'currentMonth') {
       const start = startOfMonth(new Date());
       const end = endOfMonth(new Date());
@@ -144,16 +150,13 @@ export default function Records() {
     .reduce((sum, record) => sum + record.monto_efectivo, 0);
 
   const clearFilters = () => {
-    setDateFilter('currentMonth');
+    setDateFilter('today');
     setSpecificDate(undefined);
-    setDateRange({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) });
+    setDateRange({ from: undefined, to: undefined });
   };
 
-  const hasActiveFilters = dateFilter !== 'currentMonth' || specificDate || 
-    (dateRange.from && dateRange.to && (
-      dateRange.from.getTime() !== startOfMonth(new Date()).getTime() || 
-      dateRange.to.getTime() !== endOfMonth(new Date()).getTime()
-    ));
+  const hasActiveFilters = dateFilter !== 'today' || specificDate || 
+    (dateRange.from && dateRange.to);
 
   const getPaymentMethodBadge = (method: string) => {
     const styles = {
@@ -245,11 +248,12 @@ export default function Records() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <Select value={dateFilter} onValueChange={(value: 'specific' | 'range' | 'currentMonth') => setDateFilter(value)}>
+            <Select value={dateFilter} onValueChange={(value: 'specific' | 'range' | 'today' | 'currentMonth') => setDateFilter(value)}>
               <SelectTrigger className="w-full text-sm sm:text-base">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="today">Hoy</SelectItem>
                 <SelectItem value="currentMonth">Mes actual</SelectItem>
                 <SelectItem value="specific">Día específico</SelectItem>
                 <SelectItem value="range">Rango de fechas</SelectItem>
