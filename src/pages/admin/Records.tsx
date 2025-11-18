@@ -301,39 +301,56 @@ export default function Records() {
     if (isClinic) {
       const clinicDetails = details as ClinicDetail[];
       return (
-        <div className="space-y-2">
-          <h4 className="font-medium text-sm">Servicios:</h4>
-          {clinicDetails.map((detail, index) => (
-            <div key={detail.id} className="flex justify-between items-center text-sm border-b pb-1">
-              <div>
-                <span className="font-medium">{detail.servicio_nombre || `Servicio ${index + 1}`}</span>
-                <span className="text-muted-foreground ml-2">x{detail.cantidad}</span>
+        <div className="space-y-3">
+          <h4 className="font-medium text-sm text-gray-700">Servicios:</h4>
+          <div className="space-y-2">
+            {clinicDetails.map((detail, index) => (
+              <div key={detail.id} className="flex justify-between items-center text-sm bg-gray-50 rounded-lg p-3">
+                <div className="flex-1">
+                  <span className="font-medium text-gray-900">{detail.servicio_nombre || `Servicio ${index + 1}`}</span>
+                  <span className="text-gray-600 ml-2">x{detail.cantidad}</span>
+                </div>
+                <div className="text-right">
+                  <div className="font-medium text-gray-900">Bs. {detail.subtotal.toFixed(2)}</div>
+                  <div className="text-xs text-gray-500">Bs. {detail.precio_unitario.toFixed(2)} c/u</div>
+                </div>
               </div>
-              <div className="text-right">
-                <div className="font-medium">Bs. {detail.subtotal.toFixed(2)}</div>
-                <div className="text-xs text-muted-foreground">Bs. {detail.precio_unitario.toFixed(2)} c/u</div>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       );
     } else {
       const batasDetails = details as BatasDetail[];
       return (
-        <div className="space-y-2">
-          <h4 className="font-medium text-sm">Productos:</h4>
-          {batasDetails.map((detail, index) => (
-            <div key={detail.id} className="flex justify-between items-center text-sm border-b pb-1">
-              <div>
-                <span className="font-medium">{detail.producto_nombre || `Producto ${index + 1}`}</span>
-                <span className="text-muted-foreground ml-2">x{detail.cantidad}</span>
-              </div>
-              <div className="text-right">
-                <div className="font-medium">Bs. {detail.subtotal.toFixed(2)}</div>
-                <div className="text-xs text-muted-foreground">Bs. {detail.precio_unitario.toFixed(2)} c/u</div>
-              </div>
-            </div>
-          ))}
+        <div className="space-y-3">
+          <h4 className="font-medium text-sm text-gray-700">Productos:</h4>
+          <div className="space-y-2">
+            {batasDetails.map((detail, index) => {
+              // Construir el nombre del producto con talla y color si están disponibles
+              let productName = detail.producto_nombre || `Producto ${index + 1}`;
+              const sizeColorParts = [];
+              
+              if (detail.talla) sizeColorParts.push(detail.talla);
+              if (detail.color) sizeColorParts.push(detail.color);
+              
+              if (sizeColorParts.length > 0) {
+                productName += ` ${sizeColorParts.join(' ')}`;
+              }
+              
+              return (
+                <div key={detail.id} className="flex justify-between items-center text-sm bg-blue-50 rounded-lg p-3">
+                  <div className="flex-1">
+                    <span className="font-medium text-gray-900">{productName}</span>
+                    <span className="text-gray-600 ml-2">x{detail.cantidad}</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium text-gray-900">Bs. {detail.subtotal.toFixed(2)}</div>
+                    <div className="text-xs text-gray-500">Bs. {detail.precio_unitario.toFixed(2)} c/u</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       );
     }

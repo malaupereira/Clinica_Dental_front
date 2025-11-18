@@ -44,6 +44,8 @@ interface BackendBatasDetail {
   precio_unitario: string;
   subtotal: string;
   producto_nombre?: string;
+  talla?: string;
+  color?: string;
 }
 
 export interface ClinicRecord {
@@ -91,6 +93,8 @@ export interface BatasDetail {
   precio_unitario: number;
   subtotal: number;
   producto_nombre?: string;
+  talla?: string;
+  color?: string;
 }
 
 export interface ClinicRecordRequest {
@@ -199,7 +203,9 @@ export const getBatasRecordDetails = async (id: string): Promise<BatasDetail[]> 
       cantidad: detail.cantidad,
       precio_unitario: parseFloat(detail.precio_unitario),
       subtotal: parseFloat(detail.subtotal),
-      producto_nombre: detail.producto_nombre
+      producto_nombre: detail.producto_nombre,
+      talla: detail.talla,
+      color: detail.color
     }));
   } catch (error) {
     console.error("Error fetching batas record details:", error);
