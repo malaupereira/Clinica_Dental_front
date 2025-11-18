@@ -53,6 +53,21 @@ export default function Cash() {
   });
   const [movements, setMovements] = useState<CombinedMovement[]>([]);
 
+  // Función para formatear la fecha ISO a un formato legible sin cambiar la hora
+  const formatDateDisplay = (isoString: string) => {
+    // Extraer directamente del string ISO sin convertir zonas horarias
+    const date = new Date(isoString);
+    
+    // Usar los componentes UTC para mantener la hora original
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+  };
+
   // Cargar cajas al iniciar
   useEffect(() => {
     loadCashBoxes();
@@ -389,7 +404,7 @@ export default function Cash() {
                           </h3>
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-xs text-muted-foreground">
-                              {format(new Date(movement.date), 'dd/MM/yy HH:mm')}
+                              {formatDateDisplay(movement.date)}
                             </span>
                             {getMovementBadge(movement.movementType)}
                           </div>
@@ -424,7 +439,7 @@ export default function Cash() {
                       <div className="grid grid-cols-2 gap-3 text-xs mt-2">
                         <div>
                           <span className="text-muted-foreground">Fecha completa:</span>
-                          <p className="font-medium">{format(new Date(movement.date), 'dd/MM/yyyy HH:mm')}</p>
+                          <p className="font-medium">{formatDateDisplay(movement.date)}</p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Tipo:</span>
@@ -478,7 +493,7 @@ export default function Cash() {
                     movements.map((movement) => (
                       <TableRow key={movement.id}>
                         <TableCell className="text-sm">
-                          {format(new Date(movement.date), 'dd/MM/yyyy HH:mm')}
+                          {formatDateDisplay(movement.date)}
                         </TableCell>
                         <TableCell className="text-sm">
                           {movement.user || 'N/A'}
