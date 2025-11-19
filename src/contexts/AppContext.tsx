@@ -381,12 +381,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     try {
       setLoading(true);
+      console.log("Refreshing quotations...");
       const fetchedQuotations = await getQuotations();
+      console.log("Fetched quotations:", fetchedQuotations);
+      
+      // Cargar comisiones para cada cotización
       const quotationsWithCommissions = await Promise.all(
-        fetchedQuotations.map(quotation => loadServiceCommissions(quotation))
+        fetchedQuotations.map(async (quotation) => {
+          try {
+            return await loadServiceCommissions(quotation);
+          } catch (error) {
+            console.error(`Error loading commissions for quotation ${quotation.id}:`, error);
+            return quotation; // Retornar cotización sin comisiones si hay error
+          }
+        })
       );
+      
       setQuotations(quotationsWithCommissions);
       setDataLoaded(prev => ({ ...prev, quotations: true }));
+      console.log("Final quotations state:", quotationsWithCommissions);
     } catch (error) {
       console.error('Error loading quotations:', error);
       setDataLoaded(prev => ({ ...prev, quotations: false }));
@@ -504,7 +517,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await Promise.all([
           refreshSpecialties(),
           refreshDoctors(),
-          refreshProducts()
+          refreshProducts(),
+          refreshQuotations() // Agregar cotizaciones a la carga inicial
         ]);
         
         setIsInitialized(true);
@@ -620,9 +634,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       const quotationRequest: QuotationRequest = {
         ...quotationData,
-        userId: userData.idUsuario
+        userId: userData.idUsuario || 1
       };
       
+      console.log("Creating quotation with data:", quotationRequest);
       const newQuotation = await createQuotation(quotationRequest);
       const quotationWithCommissions = await loadServiceCommissions(newQuotation);
       
@@ -636,7 +651,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateQuotation = async (id: string, quotationData: any): Promise<Quotation> => {
     try {
-      const updatedQuotation = await updateQuotationApi(id, quotationData);
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+      const quotationRequest: QuotationRequest = {
+        ...quotationData,
+        userId: userData.idUsuario || 1
+      };
+      
+      const updatedQuotation = await updateQuotationApi(id, quotationRequest);
       const quotationWithCommissions = await loadServiceCommissions(updatedQuotation);
       
       setQuotations(prev => 
@@ -664,9 +685,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       const paymentRequest: PaymentRequest = {
         ...paymentData,
-        userId: userData.idUsuario
+        userId: userData.idUsuario || 1
       };
       
+      console.log("Registering payment with data:", paymentRequest);
       const updatedQuotation = await registerPayment(paymentRequest);
       const quotationWithCommissions = await loadServiceCommissions(updatedQuotation);
       
