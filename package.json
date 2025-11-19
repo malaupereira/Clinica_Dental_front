@@ -8,9 +8,9 @@
     "node": "22.x"
   },
 
-  "scripts": {
+   "scripts": {
+    "build": "vite build",
     "dev": "vite",
-    "build": "npx vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview"
