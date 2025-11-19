@@ -8,12 +8,12 @@
     "node": "22.x"
   },
 
-   "scripts": {
-    "build": "vite build",
-    "dev": "vite",
-    "build:dev": "vite build --mode development",
-    "lint": "eslint .",
-    "preview": "vite preview"
+  "scripts": {
+  "build": "node node_modules/vite/bin/vite.js build",
+  "dev": "vite",
+  "build:dev": "node node_modules/vite/bin/vite.js build --mode development",
+  "lint": "eslint .",
+  "preview": "node node_modules/vite/bin/vite.js preview"
   },
 
   "dependencies": {
