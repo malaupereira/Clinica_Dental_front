@@ -193,6 +193,8 @@ interface AppContextType {
   refreshLowStockProducts: () => Promise<void>;
   refreshLeastSoldProducts: () => Promise<void>;
   loading: boolean;
+  dataLoaded: { [key: string]: boolean };
+  loadData: (dataTypes: string[]) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -249,6 +251,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [leastSoldProducts, setLeastSoldProducts] = useState<LeastSoldProduct[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState<{ [key: string]: boolean }>({});
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('authToken') !== null;
   });
@@ -261,91 +264,121 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const refreshSpecialties = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       const fetchedSpecialties = await getSpecialties();
       setSpecialties(fetchedSpecialties);
+      setDataLoaded(prev => ({ ...prev, specialties: true }));
     } catch (error) {
       console.error('Error loading specialties:', error);
+      setDataLoaded(prev => ({ ...prev, specialties: false }));
     } finally {
       setLoading(false);
     }
   };
 
   const refreshDoctors = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       const fetchedDoctors = await getDoctors();
       setDoctors(fetchedDoctors);
+      setDataLoaded(prev => ({ ...prev, doctors: true }));
     } catch (error) {
       console.error('Error loading doctors:', error);
+      setDataLoaded(prev => ({ ...prev, doctors: false }));
     } finally {
       setLoading(false);
     }
   };
 
   const refreshProducts = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       const fetchedProducts = await getProductsApi();
       setProducts(fetchedProducts);
+      setDataLoaded(prev => ({ ...prev, products: true }));
     } catch (error) {
       console.error('Error loading products:', error);
+      setDataLoaded(prev => ({ ...prev, products: false }));
     } finally {
       setLoading(false);
     }
   };
 
   const refreshExpenses = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       const fetchedExpenses = await getExpensesApi();
       setExpenses(fetchedExpenses);
+      setDataLoaded(prev => ({ ...prev, expenses: true }));
     } catch (error) {
       console.error('Error loading expenses:', error);
+      setDataLoaded(prev => ({ ...prev, expenses: false }));
     } finally {
       setLoading(false);
     }
   };
 
   const refreshTransactions = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       const fetchedMovements = await getMovements();
       const transactions = fetchedMovements.map(mapMovementToTransaction);
       setTransactions(transactions);
+      setDataLoaded(prev => ({ ...prev, transactions: true }));
     } catch (error) {
       console.error('Error loading transactions:', error);
+      setDataLoaded(prev => ({ ...prev, transactions: false }));
     } finally {
       setLoading(false);
     }
   };
 
   const refreshClinicRecords = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       const fetchedRecords = await getClinicRecords();
       setClinicRecords(fetchedRecords);
+      setDataLoaded(prev => ({ ...prev, clinicRecords: true }));
     } catch (error) {
       console.error('Error loading clinic records:', error);
+      setDataLoaded(prev => ({ ...prev, clinicRecords: false }));
     } finally {
       setLoading(false);
     }
   };
 
   const refreshBatasRecords = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       const fetchedRecords = await getBatasRecords();
       setBatasRecords(fetchedRecords);
+      setDataLoaded(prev => ({ ...prev, batasRecords: true }));
     } catch (error) {
       console.error('Error loading batas records:', error);
+      setDataLoaded(prev => ({ ...prev, batasRecords: false }));
     } finally {
       setLoading(false);
     }
   };
 
   const refreshQuotations = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       const fetchedQuotations = await getQuotations();
@@ -353,8 +386,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchedQuotations.map(quotation => loadServiceCommissions(quotation))
       );
       setQuotations(quotationsWithCommissions);
+      setDataLoaded(prev => ({ ...prev, quotations: true }));
     } catch (error) {
       console.error('Error loading quotations:', error);
+      setDataLoaded(prev => ({ ...prev, quotations: false }));
     } finally {
       setLoading(false);
     }
@@ -365,60 +400,112 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     dateRange: { start: string; end: string }, 
     productType: 'clinic' | 'batas'
   ) => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       const data = await getReportsData(period, dateRange, productType);
       setReportsData(data);
+      setDataLoaded(prev => ({ ...prev, reportsData: true }));
     } catch (error) {
       console.error('Error loading reports data:', error);
+      setDataLoaded(prev => ({ ...prev, reportsData: false }));
     } finally {
       setLoading(false);
     }
   };
 
   const refreshLowStockProducts = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       const data = await getLowStockProducts();
       setLowStockProducts(data);
+      setDataLoaded(prev => ({ ...prev, lowStockProducts: true }));
     } catch (error) {
       console.error('Error loading low stock products:', error);
+      setDataLoaded(prev => ({ ...prev, lowStockProducts: false }));
     } finally {
       setLoading(false);
     }
   };
 
   const refreshLeastSoldProducts = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       const data = await getLeastSoldProducts();
       setLeastSoldProducts(data);
+      setDataLoaded(prev => ({ ...prev, leastSoldProducts: true }));
     } catch (error) {
       console.error('Error loading least sold products:', error);
+      setDataLoaded(prev => ({ ...prev, leastSoldProducts: false }));
     } finally {
       setLoading(false);
     }
   };
 
+  // Función para cargar datos específicos
+  const loadData = async (dataTypes: string[]) => {
+    if (!isAuthenticated) return;
+    
+    try {
+      setLoading(true);
+      const promises = dataTypes.map(type => {
+        switch (type) {
+          case 'specialties':
+            return refreshSpecialties();
+          case 'doctors':
+            return refreshDoctors();
+          case 'products':
+            return refreshProducts();
+          case 'expenses':
+            return refreshExpenses();
+          case 'transactions':
+            return refreshTransactions();
+          case 'clinicRecords':
+            return refreshClinicRecords();
+          case 'batasRecords':
+            return refreshBatasRecords();
+          case 'quotations':
+            return refreshQuotations();
+          case 'lowStockProducts':
+            return refreshLowStockProducts();
+          case 'leastSoldProducts':
+            return refreshLeastSoldProducts();
+          default:
+            return Promise.resolve();
+        }
+      });
+      
+      await Promise.all(promises);
+    } catch (error) {
+      console.error('Error loading specific data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Solo inicializar datos básicos cuando el usuario esté autenticado
   useEffect(() => {
     const initializeApp = async () => {
+      // Solo cargar datos básicos si el usuario está autenticado
+      if (!isAuthenticated) {
+        setIsInitialized(true);
+        return;
+      }
+
       try {
         setLoading(true);
         
+        // Cargar solo datos esenciales al inicio
         await Promise.all([
           refreshSpecialties(),
           refreshDoctors(),
-          refreshProducts(),
-          refreshExpenses(),
-          refreshTransactions(),
-          refreshClinicRecords(),
-          refreshBatasRecords(),
-          refreshQuotations(),
-          refreshLowStockProducts(),
-          refreshLeastSoldProducts()
+          refreshProducts()
         ]);
-        
-        setSales(JSON.parse(localStorage.getItem('sales') || '[]'));
         
         setIsInitialized(true);
       } catch (error) {
@@ -429,7 +516,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     initializeApp();
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (isInitialized) {
@@ -615,8 +702,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsAuthenticated(false);
     setUser(null);
     setUserRole(null);
+    // Limpiar todos los datos al hacer logout
+    setSpecialties([]);
+    setDoctors([]);
+    setProducts([]);
+    setTransactions([]);
+    setExpenses([]);
+    setClinicRecords([]);
+    setBatasRecords([]);
+    setQuotations([]);
+    setSales([]);
+    setReportsData(null);
+    setLowStockProducts([]);
+    setLeastSoldProducts([]);
+    setDataLoaded({});
     localStorage.removeItem('authToken');
     localStorage.removeItem('userData');
+    localStorage.removeItem('sales');
   };
 
   return (
@@ -670,7 +772,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refreshReportsData,
         refreshLowStockProducts,
         refreshLeastSoldProducts,
-        loading
+        loading,
+        dataLoaded,
+        loadData
       }}
     >
       {children}
