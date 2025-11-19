@@ -5,19 +5,20 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 export interface LeastSoldProduct {
   idproducto: number;
   nombre: string;
-  total_vendido: number;
-  stock_actual: number;
-  precio: number;
+  talla?: string;
+  color?: string;
+  stock: number;
+  ultima_venta?: string;
 }
 
 // Interfaces para productos con bajo stock
 export interface LowStockProduct {
   idproducto: number;
   nombre: string;
-  stock_actual: number;
+  talla?: string;
+  color?: string;
+  stock: number;
   stock_minimo: number;
-  precio: number;
-  necesita_reorden: boolean;
 }
 
 // Interfaces para datos de reportes
@@ -54,6 +55,16 @@ export interface ReportsData {
     cantidad_vendida: number;
     total_ventas: number;
   }>;
+  mostSoldProducts: Array<{
+    idproducto: number;
+    nombre: string;
+    cantidad_vendida: number;
+    ingresos_totales: number;
+    talla?: string;
+    color?: string;
+  }>;
+  totalRevenue: number;
+  totalSales: number;
 }
 
 const api = axios.create({
@@ -71,7 +82,7 @@ export const getReportsData = async (
   productType: 'clinic' | 'batas'
 ): Promise<ReportsData> => {
   try {
-    const response = await api.get<ReportsData>("/reports/data", {
+    const response = await api.get("/reports/sales-data", {  // Cambiado de "/reports/data" a "/reports/sales-data"
       params: {
         period,
         startDate: dateRange.start,
@@ -101,7 +112,10 @@ export const getReportsData = async (
       },
       tendencia_ventas: [],
       productos_populares: [],
-      servicios_populares: []
+      servicios_populares: [],
+      mostSoldProducts: [],
+      totalRevenue: 0,
+      totalSales: 0
     };
   }
 };

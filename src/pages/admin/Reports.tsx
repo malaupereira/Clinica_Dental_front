@@ -44,7 +44,7 @@ export default function Reports() {
   };
 
   // Datos para el gráfico
-  const chartData = reportsData?.mostSoldProducts.map(product => ({
+  const chartData = reportsData?.mostSoldProducts?.map(product => ({
     name: product.nombre.length > 20 ? product.nombre.substring(0, 20) + '...' : product.nombre,
     cantidad: product.cantidad_vendida,
     ingresos: product.ingresos_totales
@@ -187,7 +187,7 @@ export default function Reports() {
             <div className="flex items-center justify-center py-8">
               <p>Cargando datos...</p>
             </div>
-          ) : leastSoldProducts.length === 0 ? (
+          ) : !leastSoldProducts || leastSoldProducts.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No hay productos sin ventas en los últimos 3 meses</p>
           ) : (
             <Table>
@@ -253,7 +253,7 @@ export default function Reports() {
             <div className="flex items-center justify-center py-8">
               <p>Cargando datos...</p>
             </div>
-          ) : lowStockProducts.length === 0 ? (
+          ) : !lowStockProducts || lowStockProducts.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No hay productos con stock bajo</p>
           ) : (
             <Table>
