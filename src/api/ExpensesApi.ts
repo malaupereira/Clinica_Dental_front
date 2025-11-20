@@ -17,6 +17,13 @@ interface BackendDoctor {
   nombre: string;
 }
 
+interface BoxBalanceResponse {
+  clinic: number;
+  clinicQr: number;
+  batas: number;
+  batasQr: number;
+}
+
 export interface Expense {
   id: string;
   type: string;
@@ -169,5 +176,15 @@ export const getDoctors = async (): Promise<BackendDoctor[]> => {
   } catch (error) {
     console.error("Error fetching doctors:", error);
     throw new Error("No se pudieron cargar los doctores");
+  }
+};
+
+export const getBoxBalances = async (): Promise<BoxBalanceResponse> => {
+  try {
+    const response = await api.get<BoxBalanceResponse>("/expenses/box-balances");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching box balances:", error);
+    throw new Error("No se pudieron cargar los saldos de las cajas");
   }
 };

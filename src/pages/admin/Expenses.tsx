@@ -17,7 +17,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { getDoctors, createExpense, updateExpense, deleteExpense, payExpense, payCommissionGroup, ExpenseRequest, PaymentRequest, CommissionPaymentRequest } from '@/api/ExpensesApi';
+import { getDoctors, createExpense, updateExpense, deleteExpense, payExpense, payCommissionGroup, getBoxBalances, ExpenseRequest, PaymentRequest, CommissionPaymentRequest } from '@/api/ExpensesApi';
 
 const clinicExpenseTypes = ['Salarios', 'Pago Laboratorios', 'Pago Comisión Doctores', 'Compra de Insumos', 'Compra de Materiales de Limpieza', 'Alquiler', 'Compra Material de Escritorio', 'Internet', 'Luz', 'Celulares', 'Otros Gastos Clínica'];
 const batasExpenseTypes = ['Envíos', 'Compra de Telas', 'Costura', 'Otros Gastos Batas'];
@@ -46,8 +46,15 @@ interface Doctor {
   nombre: string;
 }
 
+interface BoxBalances {
+  clinic: number;
+  clinicQr: number;
+  batas: number;
+  batasQr: number;
+}
+
 export default function Expenses() {
-  const { expenses, addExpense, updateExpense: updateExpenseContext, deleteExpense: deleteExpenseContext, transactions, refreshExpenses, refreshTransactions } = useApp();
+  const { expenses, addExpense, updateExpense: updateExpenseContext, deleteExpense: deleteExpenseContext, refreshExpenses, refreshTransactions } = useApp();
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [payDialogOpen, setPayDialogOpen] = useState(false);
@@ -73,6 +80,7 @@ export default function Expenses() {
   const [paymentData, setPaymentData] = useState<PaymentFormData>({ clinicAmount: '', clinicQrAmount: '', batasAmount: '', batasQrAmount: '' });
   const [formData, setFormData] = useState<ExpenseFormData>({ type: '', doctor: '', description: '', amount: '', clinicAmount: '', clinicQrAmount: '', batasAmount: '', batasQrAmount: '', status: 'pending' });
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [boxBalances, setBoxBalances] = useState<BoxBalances>({ clinic: 0, clinicQr: 0, batas: 0, batasQr: 0 });
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastSubmission, setLastSubmission] = useState<{timestamp: number, data: any} | null>(null);
@@ -92,18 +100,22 @@ export default function Expenses() {
     return `${day}/${month}/${year} ${hours}:${minutes}`;
   };
 
-  // Cargar doctores al montar el componente
+  // Cargar doctores y saldos de cajas al montar el componente
   useEffect(() => {
-    const loadDoctors = async () => {
+    const loadInitialData = async () => {
       try {
-        const doctorsData = await getDoctors();
+        const [doctorsData, balancesData] = await Promise.all([
+          getDoctors(),
+          getBoxBalances()
+        ]);
         setDoctors(doctorsData);
+        setBoxBalances(balancesData);
       } catch (error) {
-        console.error('Error loading doctors:', error);
-        toast.error('Error al cargar los doctores');
+        console.error('Error loading initial data:', error);
+        toast.error('Error al cargar los datos iniciales');
       }
     };
-    loadDoctors();
+    loadInitialData();
   }, []);
 
   // Cargar gastos con filtros aplicados
@@ -119,16 +131,21 @@ export default function Expenses() {
     loadExpensesWithFilters();
   }, [dateFilter, specificDate, dateRange]);
 
-  const calculateBoxBalance = (boxType: string) => {
-    return transactions
-      .filter(t => t.type === boxType)
-      .reduce((sum, t) => sum + t.amount, 0);
-  };
-
-  const clinicBalance = calculateBoxBalance('clinic');
-  const clinicQrBalance = calculateBoxBalance('clinic-qr');
-  const batasBalance = calculateBoxBalance('batas');
-  const batasQrBalance = calculateBoxBalance('batas-qr');
+  // Actualizar saldos de cajas cuando se abra el diálogo de pago
+  useEffect(() => {
+    const loadBoxBalances = async () => {
+      if (payDialogOpen) {
+        try {
+          const balances = await getBoxBalances();
+          setBoxBalances(balances);
+        } catch (error) {
+          console.error('Error loading box balances:', error);
+          toast.error('Error al cargar los saldos de las cajas');
+        }
+      }
+    };
+    loadBoxBalances();
+  }, [payDialogOpen]);
 
   const getGroupedCommissions = () => {
     const commissionExpenses = expenses.filter(expense => 
@@ -354,27 +371,27 @@ export default function Expenses() {
 
       // Validar saldos suficientes
       if (expenseToPay.category === 'clinic') {
-        if (clinicAmount > clinicBalance) { 
-          toast.error(`No hay suficiente saldo en Caja Dental Studio. Saldo disponible: Bs. ${clinicBalance.toFixed(2)}`); 
+        if (clinicAmount > boxBalances.clinic) { 
+          toast.error(`No hay suficiente saldo en Caja Dental Studio. Saldo disponible: Bs. ${boxBalances.clinic.toFixed(2)}`); 
           setLoading(false);
           setIsSubmitting(false);
           return; 
         }
-        if (clinicQrAmount > clinicQrBalance) { 
-          toast.error(`No hay suficiente saldo en Caja Dental Studio QR. Saldo disponible: Bs. ${clinicQrBalance.toFixed(2)}`); 
+        if (clinicQrAmount > boxBalances.clinicQr) { 
+          toast.error(`No hay suficiente saldo en Caja Dental Studio QR. Saldo disponible: Bs. ${boxBalances.clinicQr.toFixed(2)}`); 
           setLoading(false);
           setIsSubmitting(false);
           return; 
         }
       } else {
-        if (batasAmount > batasBalance) { 
-          toast.error(`No hay suficiente saldo en Caja Dr.Dress. Saldo disponible: Bs. ${batasBalance.toFixed(2)}`); 
+        if (batasAmount > boxBalances.batas) { 
+          toast.error(`No hay suficiente saldo en Caja Dr.Dress. Saldo disponible: Bs. ${boxBalances.batas.toFixed(2)}`); 
           setLoading(false);
           setIsSubmitting(false);
           return; 
         }
-        if (batasQrAmount > batasQrBalance) { 
-          toast.error(`No hay suficiente saldo en Caja Dr.Dress QR. Saldo disponible: Bs. ${batasQrBalance.toFixed(2)}`); 
+        if (batasQrAmount > boxBalances.batasQr) { 
+          toast.error(`No hay suficiente saldo en Caja Dr.Dress QR. Saldo disponible: Bs. ${boxBalances.batasQr.toFixed(2)}`); 
           setLoading(false);
           setIsSubmitting(false);
           return; 
@@ -418,8 +435,12 @@ export default function Expenses() {
         toast.success('Gasto pagado completamente');
       }
 
-      // Recargar datos
-      await Promise.all([refreshExpenses(), refreshTransactions()]);
+      // Recargar datos y saldos
+      await Promise.all([
+        refreshExpenses(), 
+        refreshTransactions(),
+        getBoxBalances().then(setBoxBalances)
+      ]);
       
     } catch (error: any) {
       console.error('Error processing payment:', error);
@@ -445,9 +466,9 @@ export default function Expenses() {
   const handlePaySingleCommission = (commission: any) => { 
     setExpenseToPay(commission); 
     setPaymentData({ 
-      clinicAmount: commission.category === 'clinic' ? commission.amount.toString() : '', 
+      clinicAmount: '', 
       clinicQrAmount: '', 
-      batasAmount: commission.category === 'batas' ? commission.amount.toString() : '', 
+      batasAmount: '', 
       batasQrAmount: '' 
     }); 
     setPayDialogOpen(true); 
@@ -470,7 +491,7 @@ export default function Expenses() {
       date: new Date().toISOString(), 
       isCommissionGroup: true 
     }); 
-    setPaymentData({ clinicAmount: totalAmount.toString(), clinicQrAmount: '', batasAmount: '', batasQrAmount: '' }); 
+    setPaymentData({ clinicAmount: '', clinicQrAmount: '', batasAmount: '', batasQrAmount: '' }); 
     setPayDialogOpen(true); 
   };
 
@@ -499,9 +520,9 @@ export default function Expenses() {
   const handlePay = (expense: any) => { 
     setExpenseToPay(expense); 
     setPaymentData({ 
-      clinicAmount: expense.category === 'clinic' ? expense.amount.toString() : '', 
+      clinicAmount: '', 
       clinicQrAmount: '', 
-      batasAmount: expense.category === 'batas' ? expense.amount.toString() : '', 
+      batasAmount: '', 
       batasQrAmount: '' 
     }); 
     setPayDialogOpen(true); 
@@ -1213,7 +1234,7 @@ export default function Expenses() {
                 {expenseToPay?.category === 'clinic' ? (
                   <>
                     <div className="space-y-2">
-                      <Label className="text-xs sm:text-sm">Caja Dental Studio (Saldo: Bs. {clinicBalance.toFixed(2)})</Label>
+                      <Label className="text-xs sm:text-sm">Caja Dental Studio (Saldo: Bs. {boxBalances.clinic.toFixed(2)})</Label>
                       <Input 
                         type="number" 
                         step="0.01" 
@@ -1225,7 +1246,7 @@ export default function Expenses() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-xs sm:text-sm">Caja Dental Studio QR (Saldo: Bs. {clinicQrBalance.toFixed(2)})</Label>
+                      <Label className="text-xs sm:text-sm">Caja Dental Studio QR (Saldo: Bs. {boxBalances.clinicQr.toFixed(2)})</Label>
                       <Input 
                         type="number" 
                         step="0.01" 
@@ -1240,7 +1261,7 @@ export default function Expenses() {
                 ) : (
                   <>
                     <div className="space-y-2">
-                      <Label className="text-xs sm:text-sm">Caja Dr.Dress (Saldo: Bs. {batasBalance.toFixed(2)})</Label>
+                      <Label className="text-xs sm:text-sm">Caja Dr.Dress (Saldo: Bs. {boxBalances.batas.toFixed(2)})</Label>
                       <Input 
                         type="number" 
                         step="0.01" 
@@ -1252,7 +1273,7 @@ export default function Expenses() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-xs sm:text-sm">Caja Dr.Dress QR (Saldo: Bs. {batasQrBalance.toFixed(2)})</Label>
+                      <Label className="text-xs sm:text-sm">Caja Dr.Dress QR (Saldo: Bs. {boxBalances.batasQr.toFixed(2)})</Label>
                       <Input 
                         type="number" 
                         step="0.01" 
