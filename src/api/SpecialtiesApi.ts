@@ -58,7 +58,17 @@ export const createSpecialty = async (specialty: SpecialtyRequest): Promise<Spec
 // Actualizar una especialidad y sus servicios
 export const updateSpecialty = async (id: string, specialty: SpecialtyRequest): Promise<Specialty> => {
   try {
-    const response = await api.put<Specialty>(`/specialties/specialties/${id}`, specialty);
+    // Preparar los datos para el backend - convertir IDs string a number si es necesario
+    const preparedSpecialty = {
+      ...specialty,
+      servicios: specialty.servicios.map(service => ({
+        ...service,
+        // Si el id existe y es string, convertirlo a number para el backend
+        id: service.id ? (typeof service.id === 'string' ? parseInt(service.id) : service.id) : undefined
+      }))
+    };
+    
+    const response = await api.put<Specialty>(`/specialties/specialties/${id}`, preparedSpecialty);
     return response.data;
   } catch (error: any) {
     console.error("Error updating specialty:", error.response?.data || error.message);

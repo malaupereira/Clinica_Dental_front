@@ -105,7 +105,7 @@ export default function Specialties() {
     setServiceToDelete(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (submitting) {
@@ -124,8 +124,8 @@ export default function Specialties() {
       return;
     }
 
-    setConfirmAction(editingId ? 'edit' : 'create');
-    setShowConfirmDialog(true);
+    // Enviar directamente sin confirmación para crear/editar
+    await confirmSubmit();
   };
 
   const confirmSubmit = async () => {
@@ -157,7 +157,6 @@ export default function Specialties() {
       }
       
       resetForm();
-      setShowConfirmDialog(false);
     } catch (error: any) {
       console.error('Error saving specialty:', error);
       toast.error(error.message || 'Error al guardar la especialidad');
@@ -377,21 +376,19 @@ export default function Specialties() {
         })}
       </div>
 
-      {/* Alert Dialog para confirmar eliminación de especialidad */}
+      {/* Alert Dialog para confirmar eliminación de especialidad (solo para eliminar) */}
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Está seguro?</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmAction === 'create' && `¿Desea crear la especialidad "${name}"?`}
-              {confirmAction === 'edit' && `¿Desea guardar los cambios en la especialidad "${name}"?`}
-              {confirmAction === 'delete' && '¿Desea eliminar esta especialidad? Esta acción no se puede deshacer.'}
+              ¿Desea eliminar esta especialidad? Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={submitting}>Cancelar</AlertDialogCancel>
             <AlertDialogAction 
-              onClick={confirmAction === 'delete' ? confirmDelete : confirmSubmit}
+              onClick={confirmDelete}
               disabled={submitting}
               className="relative"
             >
