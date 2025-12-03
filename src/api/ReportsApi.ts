@@ -21,6 +21,16 @@ export interface LowStockProduct {
   stock_minimo: number;
 }
 
+// Interfaces para productos con bajo stock en bodega
+export interface WarehouseLowStockProduct {
+  idproducto: number;
+  nombre: string;
+  talla?: string;
+  color?: string;
+  stock_bodega: number;
+  stock_minimo_bodega: number;
+}
+
 // Interfaces para datos de reportes
 export interface ReportsData {
   total_ingresos: number;
@@ -127,6 +137,17 @@ export const getLowStockProducts = async (): Promise<LowStockProduct[]> => {
     return response.data;
   } catch (error) {
     console.error("Error fetching low stock products:", error);
+    return [];
+  }
+};
+
+// Obtener productos con bajo stock en bodega
+export const getWarehouseLowStockProducts = async (): Promise<WarehouseLowStockProduct[]> => {
+  try {
+    const response = await api.get<WarehouseLowStockProduct[]>("/reports/warehouse-low-stock");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching warehouse low stock products:", error);
     return [];
   }
 };

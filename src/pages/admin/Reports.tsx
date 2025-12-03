@@ -10,6 +10,20 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { AlertTriangle } from 'lucide-react';
 
+// Importar axios para obtener datos de bodega
+import axios from "axios";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+// Interface para productos con bajo stock en bodega
+interface WarehouseLowStockProduct {
+  idproducto: number;
+  nombre: string;
+  talla?: string;
+  color?: string;
+  stock_bodega: number;
+  stock_minimo_bodega: number;
+}
+
 export default function Reports() {
   const { 
     reportsData, 
@@ -23,10 +37,29 @@ export default function Reports() {
   const [salesPeriod, setSalesPeriod] = useState<'day' | 'range' | 'week' | 'month'>('month');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [productType, setProductType] = useState<'clinic' | 'batas'>('clinic');
+  const [warehouseLowStockProducts, setWarehouseLowStockProducts] = useState<WarehouseLowStockProduct[]>([]);
+  const [loadingWarehouse, setLoadingWarehouse] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Función para obtener productos con bajo stock en bodega
+  const fetchWarehouseLowStockProducts = async () => {
+    try {
+      setLoadingWarehouse(true);
+      const response = await axios.get<WarehouseLowStockProduct[]>(`${API_URL}/reports/warehouse-low-stock`, {
+        withCredentials: true
+      });
+      setWarehouseLowStockProducts(response.data);
+    } catch (error) {
+      console.error("Error fetching warehouse low stock products:", error);
+      setWarehouseLowStockProducts([]);
+    } finally {
+      setLoadingWarehouse(false);
+    }
+  };
 
   useEffect(() => {
     loadReportsData();
+    fetchWarehouseLowStockProducts();
   }, [salesPeriod, dateRange, productType]);
 
   const loadReportsData = async () => {
@@ -43,12 +76,31 @@ export default function Reports() {
     }
   };
 
-  // Datos para el gráfico
-  const chartData = reportsData?.mostSoldProducts?.map(product => ({
-    name: product.nombre.length > 20 ? product.nombre.substring(0, 20) + '...' : product.nombre,
-    cantidad: product.cantidad_vendida,
-    ingresos: product.ingresos_totales
-  })) || [];
+  // Modificar chartData para incluir talla y color en el nombre
+  const chartData = reportsData?.mostSoldProducts?.map(product => {
+    // Construir nombre completo con talla y color si están disponibles
+    let productName = product.nombre;
+    const sizeColorParts = [];
+    
+    if (product.talla) sizeColorParts.push(product.talla);
+    if (product.color) sizeColorParts.push(product.color);
+    
+    if (sizeColorParts.length > 0) {
+      productName += ` ${sizeColorParts.join(' ')}`;
+    }
+    
+    // Truncar si es muy largo para el gráfico
+    const displayName = productName.length > 25 ? productName.substring(0, 25) + '...' : productName;
+    
+    return {
+      name: displayName,
+      fullName: productName, // Nombre completo para el tooltip
+      cantidad: product.cantidad_vendida,
+      ingresos: product.ingresos_totales,
+      talla: product.talla || '',
+      color: product.color || ''
+    };
+  }) || [];
 
   if (error) {
     return (
@@ -165,6 +217,13 @@ export default function Reports() {
                         if (name === 'ingresos') return [`Bs. ${Number(value).toFixed(2)}`, 'Ingresos'];
                         return [value, 'Cantidad Vendida'];
                       }}
+                      labelFormatter={(value, payload) => {
+                        if (payload && payload[0] && payload[0].payload) {
+                          const data = payload[0].payload;
+                          return data.fullName || data.name;
+                        }
+                        return value;
+                      }}
                     />
                     <Legend />
                     <Bar yAxisId="left" dataKey="cantidad" fill="hsl(var(--primary))" name="Cantidad Vendida" />
@@ -240,7 +299,7 @@ export default function Reports() {
         </CardContent>
       </Card>
 
-      {/* Low Stock Alerts */}
+      {/* Low Stock Alerts - Productos */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -296,6 +355,101 @@ export default function Reports() {
                     <TableCell>{product.stock_minimo} unidades</TableCell>
                   </TableRow>
                 ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Low Stock Alerts - Bodega */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-orange-500" />
+            Alertas de Stock Bajo - Bodega
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingWarehouse ? (
+            <div className="flex items-center justify-center py-8">
+              <p>Cargando datos de bodega...</p>
+            </div>
+          ) : warehouseLowStockProducts.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No hay productos con stock bajo en bodega</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Producto</TableHead>
+                  <TableHead>Talla</TableHead>
+                  <TableHead>Color</TableHead>
+                  <TableHead>Stock en Bodega</TableHead>
+                  <TableHead>Stock Mínimo en Bodega</TableHead>
+                  <TableHead>Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {warehouseLowStockProducts.map(product => {
+                  // Construir nombre completo del producto
+                  let productName = product.nombre;
+                  const sizeColorParts = [];
+                  
+                  if (product.talla) sizeColorParts.push(product.talla);
+                  if (product.color) sizeColorParts.push(product.color);
+                  
+                  if (sizeColorParts.length > 0) {
+                    productName += ` ${sizeColorParts.join(' ')}`;
+                  }
+                  
+                  // Determinar el estado del stock
+                  const isOutOfStock = product.stock_bodega <= 0;
+                  const isLowStock = product.stock_bodega < product.stock_minimo_bodega;
+                  
+                  return (
+                    <TableRow key={product.idproducto}>
+                      <TableCell className="font-medium">{productName}</TableCell>
+                      <TableCell>
+                        {product.talla ? (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                            {product.talla}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {product.color ? (
+                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                            {product.color}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`font-medium ${isOutOfStock ? 'text-destructive' : isLowStock ? 'text-orange-600' : 'text-green-600'}`}>
+                          {product.stock_bodega} unidades
+                        </span>
+                      </TableCell>
+                      <TableCell>{product.stock_minimo_bodega} unidades</TableCell>
+                      <TableCell>
+                        {isOutOfStock ? (
+                          <Badge variant="destructive" className="text-xs">
+                            Sin Stock
+                          </Badge>
+                        ) : isLowStock ? (
+                          <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">
+                            Bajo Stock
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
+                            Normal
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
