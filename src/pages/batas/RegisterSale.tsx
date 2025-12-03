@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Minus, Plus, ShoppingCart, Search, Percent } from 'lucide-react';
+import { Minus, Plus, ShoppingCart, Search, Percent, Package } from 'lucide-react';
 import { searchProducts, createSale, SaleRequest } from '@/api/SalesApi';
 import {
   AlertDialog,
@@ -35,6 +35,7 @@ interface Product {
   type: 'clinic' | 'batas';
   talla?: string;
   color?: string;
+  warehouseStock?: number;
 }
 
 export default function RegisterSale() {
@@ -229,82 +230,86 @@ export default function RegisterSale() {
   };
 
   const confirmSale = async () => {
-    setShowConfirmation(false);
-    setIsSubmitting(true);
-    setLoading(true);
-    
-    try {
-      const currentSubtotal = calculateSubtotal();
-      const currentDiscountAmount = calculateDiscountAmount();
-      const currentTotal = Math.max(0, currentSubtotal - currentDiscountAmount);
+  setShowConfirmation(false);
+  setIsSubmitting(true);
+  setLoading(true);
+  
+  try {
+    const currentSubtotal = calculateSubtotal();
+    const currentDiscountAmount = calculateDiscountAmount();
+    const currentTotal = Math.max(0, currentSubtotal - currentDiscountAmount);
 
-      if (paymentMethod === 'Mixto' && (cashAmount + qrAmount !== currentTotal)) {
-        toast.error('La suma de efectivo y QR debe ser igual al total');
-        setIsSubmitting(false);
-        setLoading(false);
-        return;
-      }
-
-      const allProducts = [...products, ...searchResults];
-      const productosData = cart.map(item => {
-        const product = allProducts.find(p => p.id === item.productId);
-        return {
-          idproducto: parseInt(item.productId),
-          cantidad: item.quantity,
-          precio_unitario: product?.salePrice || 0
-        };
-      });
-
-      let detalles = 'Venta de productos: ';
-      detalles += cart.map(item => {
-        const product = allProducts.find(p => p.id === item.productId);
-        return `${product?.name} x${item.quantity}`;
-      }).join(', ');
-
-      if (discount > 0) {
-        detalles += ` - Descuento: ${discount}${discountType === 'percentage' ? '%' : ' Bs.'}`;
-      }
-
-      const saleData: SaleRequest = {
-        idusuario: user?.idUsuario || 0,
-        detalles: detalles,
-        metodo_pago: paymentMethod,
-        monto_total: currentTotal,
-        monto_efectivo: paymentMethod === 'QR' ? 0 : (paymentMethod === 'Mixto' ? cashAmount : currentTotal),
-        monto_qr: paymentMethod === 'Efectivo' ? 0 : (paymentMethod === 'Mixto' ? qrAmount : currentTotal),
-        productos: productosData
-      };
-
-      const result = await createSale(saleData);
-
-      if (result.success) {
-        toast.success('Venta registrada exitosamente');
-        
-        await Promise.all([
-          refreshProducts(),
-          refreshBatasRecords(),
-          refreshTransactions()
-        ]);
-
-        setCart([]);
-        setPaymentMethod('Efectivo');
-        setCashAmount(0);
-        setQrAmount(0);
-        setDiscount(0);
-        setDiscountType('percentage');
-        setSearchQuery('');
-        setSearchResults([]);
-      } else {
-        toast.error('Error al registrar la venta');
-      }
-    } catch (error) {
-      console.error('Error al registrar venta:', error);
-      toast.error('Error al registrar la venta');
-    } finally {
+    if (paymentMethod === 'Mixto' && (cashAmount + qrAmount !== currentTotal)) {
+      toast.error('La suma de efectivo y QR debe ser igual al total');
       setIsSubmitting(false);
       setLoading(false);
+      return;
     }
-  };
+
+    const allProducts = [...products, ...searchResults];
+    const productosData = cart.map(item => {
+      const product = allProducts.find(p => p.id === item.productId);
+      return {
+        idproducto: parseInt(item.productId),
+        cantidad: item.quantity,
+        precio_unitario: product?.salePrice || 0
+      };
+    });
+
+    let detalles = 'Venta de productos: ';
+    detalles += cart.map(item => {
+      const product = allProducts.find(p => p.id === item.productId);
+      const detallesProducto = [];
+      if (product?.talla) detallesProducto.push(`Talla: ${product.talla}`);
+      if (product?.color) detallesProducto.push(`Color: ${product.color}`);
+      const detallesStr = detallesProducto.length > 0 ? ` (${detallesProducto.join(', ')})` : '';
+      return `${product?.name}${detallesStr} x${item.quantity}`;
+    }).join(', ');
+
+    if (discount > 0) {
+      detalles += ` - Descuento: ${discount}${discountType === 'percentage' ? '%' : ' Bs.'}`;
+    }
+
+    const saleData: SaleRequest = {
+      idusuario: user?.idUsuario || 0,
+      detalles: detalles,
+      metodo_pago: paymentMethod,
+      monto_total: currentTotal,
+      monto_efectivo: paymentMethod === 'QR' ? 0 : (paymentMethod === 'Mixto' ? cashAmount : currentTotal),
+      monto_qr: paymentMethod === 'Efectivo' ? 0 : (paymentMethod === 'Mixto' ? qrAmount : currentTotal),
+      productos: productosData
+    };
+
+    const result = await createSale(saleData);
+
+    if (result.success) {
+      toast.success('Venta registrada exitosamente');
+      
+      await Promise.all([
+        refreshProducts(),
+        refreshBatasRecords(),
+        refreshTransactions()
+      ]);
+
+      setCart([]);
+      setPaymentMethod('Efectivo');
+      setCashAmount(0);
+      setQrAmount(0);
+      setDiscount(0);
+      setDiscountType('percentage');
+      setSearchQuery('');
+      setSearchResults([]);
+    } else {
+      toast.error('Error al registrar la venta');
+    }
+  } catch (error) {
+    console.error('Error al registrar venta:', error);
+    toast.error('Error al registrar la venta');
+  } finally {
+    setIsSubmitting(false);
+    setLoading(false);
+  }
+};
 
   const cancelSale = () => {
     setShowConfirmation(false);
@@ -365,9 +370,15 @@ export default function RegisterSale() {
                             </div>
                             <p className="text-2xl font-bold text-primary mt-2">Bs. {product.salePrice}</p>
                           </div>
-                          <span className="px-2 py-1 bg-muted rounded text-sm">
-                            Stock: {product.stock}
-                          </span>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="px-2 py-1 bg-muted rounded text-sm">
+                              Stock: {product.stock}
+                            </span>
+                            <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-sm">
+                              <Package className="h-3 w-3 inline-block mr-1" />
+                              Bodega: {product.warehouseStock || 0}
+                            </span>
+                          </div>
                         </div>
                         <Button onClick={() => addToCart(product.id)} className="w-full" size="sm">
                           <Plus className="h-4 w-4 mr-2" />
@@ -427,7 +438,20 @@ export default function RegisterSale() {
                                 )}
                               </div>
                             </div>
-                            <span className="font-bold">Bs. {(product.salePrice * item.quantity).toFixed(2)}</span>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="font-bold">Bs. {(product.salePrice * item.quantity).toFixed(2)}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">
+                                  Stock: {product.stock}
+                                </span>
+                                {product.warehouseStock !== undefined && (
+                                  <span className="text-xs text-gray-600 flex items-center">
+                                    <Package className="h-2.5 w-2.5 mr-0.5" />
+                                    Bodega: {product.warehouseStock}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2">

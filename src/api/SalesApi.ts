@@ -11,6 +11,7 @@ interface BackendProduct {
   estado: number;
   talla?: string;
   color?: string;
+  stock_bodega?: number;
 }
 
 export interface Product {
@@ -23,6 +24,7 @@ export interface Product {
   type: 'clinic' | 'batas';
   talla?: string;
   color?: string;
+  warehouseStock?: number;
 }
 
 export interface SaleRequest {
@@ -65,7 +67,8 @@ export const getProducts = async (): Promise<Product[]> => {
       minStock: product.stock_minimo,
       type: 'batas',
       talla: product.talla || undefined,
-      color: product.color || undefined
+      color: product.color || undefined,
+      warehouseStock: product.stock_bodega || 0
     }));
   } catch (error) {
     console.error("Error fetching products:", error);
@@ -85,7 +88,8 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
       minStock: product.stock_minimo,
       type: 'batas',
       talla: product.talla || undefined,
-      color: product.color || undefined
+      color: product.color || undefined,
+      warehouseStock: product.stock_bodega || 0
     }));
   } catch (error) {
     console.error("Error searching products:", error);
