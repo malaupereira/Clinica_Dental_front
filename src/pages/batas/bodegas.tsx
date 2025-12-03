@@ -22,7 +22,7 @@ import {
   ArrowUpDown,
   Move,
   ArrowRight,
-  ArrowLeft
+  ArrowLeft,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -45,10 +45,12 @@ import {
   getBodegaStats, 
   transferStock,
   getTransferableProducts,
+  directTransferStock,
   BodegaProduct, 
   ProductStats,
   BodegaProductRequest,
-  TransferRequest
+  TransferRequest,
+  DirectTransferRequest
 } from '@/api/BodegasApi';
 
 interface ProductFormData {
@@ -78,6 +80,13 @@ const COLOR_OPTIONS = [
 type SortField = 'nombre' | 'talla' | 'color' | 'stock_bodega' | 'precio_venta';
 type SortDirection = 'asc' | 'desc';
 
+interface TransferDialogState {
+  open: boolean;
+  product: BodegaProduct | null;
+  type: 'entrada' | 'salida';
+  cantidad: string;
+}
+
 export default function Bodegas() {
   const [products, setProducts] = useState<BodegaProduct[]>([]);
   const [transferableProducts, setTransferableProducts] = useState<BodegaProduct[]>([]);
@@ -89,7 +98,6 @@ export default function Bodegas() {
     potentialProfit: 0
   });
   const [open, setOpen] = useState(false);
-  const [transferOpen, setTransferOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingProduct, setEditingProduct] = useState<BodegaProduct | null>(null);
   const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
@@ -104,10 +112,13 @@ export default function Bodegas() {
   const [tallaFilter, setTallaFilter] = useState<string>('all');
   const [colorSearch, setColorSearch] = useState('');
   
-  // Estado para transferencia
-  const [selectedTransferProduct, setSelectedTransferProduct] = useState<BodegaProduct | null>(null);
-  const [transferQuantity, setTransferQuantity] = useState('');
-  const [transferType, setTransferType] = useState<'entrada' | 'salida'>('salida');
+  // Estado para transferencia directa en tabla
+  const [transferDialog, setTransferDialog] = useState<TransferDialogState>({
+    open: false,
+    product: null,
+    type: 'salida',
+    cantidad: ''
+  });
   
   const [formData, setFormData] = useState<ProductFormData>({
     nombre: '',
@@ -294,40 +305,66 @@ export default function Bodegas() {
     }
   };
 
-  const handleTransfer = async () => {
+  // Nueva función para manejar transferencia directa desde tabla
+  const handleDirectTransfer = async () => {
     if (isSubmitting) {
       toast.error('La operación ya está siendo procesada');
       return;
     }
 
-    if (!selectedTransferProduct || !transferQuantity || Number(transferQuantity) <= 0) {
-      toast.error('Seleccione un producto y una cantidad válida');
+    if (!transferDialog.product || !transferDialog.cantidad || Number(transferDialog.cantidad) <= 0) {
+      toast.error('Seleccione una cantidad válida');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const transferData: TransferRequest = {
-        idproducto: selectedTransferProduct.idproducto,
-        cantidad: Number(transferQuantity),
-        tipo: transferType
+      const transferData: DirectTransferRequest = {
+        idproducto: transferDialog.product.idproducto,
+        cantidad: Number(transferDialog.cantidad),
+        tipo: transferDialog.type,
+        currentStock: transferDialog.product.stock,
+        currentBodegaStock: transferDialog.product.stock_bodega
       };
 
-      const result = await transferStock(transferData);
+      const result = await directTransferStock(transferData);
       toast.success(result.message);
       
-      setSelectedTransferProduct(null);
-      setTransferQuantity('');
-      setTransferType('salida');
-      setTransferOpen(false);
+      // Actualizar el estado local inmediatamente
+      if (result.updatedProduct) {
+        setProducts(prev => prev.map(p => 
+          p.idproducto === result.updatedProduct!.idproducto ? result.updatedProduct! : p
+        ));
+      } else {
+        // Si no viene el producto actualizado, recargamos
+        await Promise.all([loadProducts(), loadTransferableProducts(), loadStats()]);
+      }
       
-      // Recargar datos
-      await Promise.all([loadProducts(), loadTransferableProducts(), loadStats()]);
+      // Cerrar diálogo
+      setTransferDialog({
+        open: false,
+        product: null,
+        type: 'salida',
+        cantidad: ''
+      });
+      
     } catch (error: any) {
       toast.error(error.message);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Función para abrir diálogo de transferencia desde la tabla
+  const openTransferDialog = (product: BodegaProduct, type: 'entrada' | 'salida') => {
+    if (isSubmitting) return;
+    
+    setTransferDialog({
+      open: true,
+      product: product,
+      type: type,
+      cantidad: ''
+    });
   };
 
   // Filtrar y ordenar productos
@@ -421,168 +458,6 @@ export default function Bodegas() {
             <p className="text-xs sm:text-sm lg:text-base text-muted-foreground">Gestión de bodegas y almacenamiento de productos</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <Dialog open={transferOpen} onOpenChange={(isOpen) => {
-              if (isSubmitting) return;
-              setTransferOpen(isOpen);
-              if (!isOpen) {
-                setSelectedTransferProduct(null);
-                setTransferQuantity('');
-                setTransferType('salida');
-              }
-            }}>
-              <DialogTrigger asChild>
-                <Button className="w-full sm:w-auto text-sm sm:text-base" variant="outline" disabled={isSubmitting}>
-                  <Move className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  Transferencia
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-[95vw] sm:max-w-md rounded-lg mx-2 sm:mx-auto">
-                <DialogHeader>
-                  <DialogTitle className="text-lg sm:text-xl">Transferencia de Stock</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3 sm:space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm sm:text-base">Tipo de Transferencia</Label>
-                    <Select 
-                      value={transferType} 
-                      onValueChange={(value: 'entrada' | 'salida') => setTransferType(value)}
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger className="text-sm sm:text-base">
-                        <SelectValue placeholder="Seleccionar tipo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="salida">
-                          <div className="flex items-center gap-2">
-                            <ArrowRight className="h-3 w-3" />
-                            <span>Bodega → Inventario</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="entrada">
-                          <div className="flex items-center gap-2">
-                            <ArrowLeft className="h-3 w-3" />
-                            <span>Inventario → Bodega</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm sm:text-base">Producto</Label>
-                    <Select 
-                      value={selectedTransferProduct?.idproducto.toString() || ''}
-                      onValueChange={(value) => {
-                        const product = transferableProducts.find(p => p.idproducto.toString() === value);
-                        setSelectedTransferProduct(product || null);
-                        setTransferQuantity('');
-                      }}
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger className="text-sm sm:text-base">
-                        <SelectValue placeholder="Seleccionar producto" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {transferType === 'salida' 
-                          ? transferableProducts.filter(p => p.stock_bodega > 0).map((product) => (
-                              <SelectItem key={product.idproducto} value={product.idproducto.toString()}>
-                                <div className="flex flex-col">
-                                  <span>{product.nombre}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {product.talla ? `Talla: ${product.talla}` : ''} {product.color ? `Color: ${product.color}` : ''}
-                                  </span>
-                                  <span className="text-xs font-medium">
-                                    Stock disponible en bodega: {product.stock_bodega}
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            ))
-                          : products.filter(p => p.stock > 0).map((product) => (
-                              <SelectItem key={product.idproducto} value={product.idproducto.toString()}>
-                                <div className="flex flex-col">
-                                  <span>{product.nombre}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {product.talla ? `Talla: ${product.talla}` : ''} {product.color ? `Color: ${product.color}` : ''}
-                                  </span>
-                                  <span className="text-xs font-medium">
-                                    Stock disponible en inventario: {product.stock}
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            ))
-                        }
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {selectedTransferProduct && (
-                    <>
-                      <div className="p-3 bg-muted/30 rounded-lg">
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">Stock en Bodega:</span>
-                            <p className="font-medium">{selectedTransferProduct.stock_bodega}</p>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Stock en Inventario:</span>
-                            <p className="font-medium">{selectedTransferProduct.stock}</p>
-                          </div>
-                          <div className="col-span-2">
-                            <span className="text-muted-foreground">Stock disponible para {transferType === 'salida' ? 'salida' : 'entrada'}:</span>
-                            <p className="font-medium text-blue-600">
-                              {getAvailableStock(selectedTransferProduct, transferType)}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-sm sm:text-base">Cantidad a transferir</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          max={getAvailableStock(selectedTransferProduct, transferType)}
-                          value={transferQuantity}
-                          onChange={(e) => setTransferQuantity(e.target.value)}
-                          placeholder={`Máximo: ${getAvailableStock(selectedTransferProduct, transferType)}`}
-                          className="text-sm sm:text-base"
-                          disabled={isSubmitting}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          {transferType === 'salida' 
-                            ? 'Se transferirá stock de bodega al inventario'
-                            : 'Se transferirá stock del inventario a bodega'}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-2 pt-3 sm:pt-4">
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => {
-                            setSelectedTransferProduct(null);
-                            setTransferQuantity('');
-                            setTransferOpen(false);
-                          }} 
-                          className="text-sm sm:text-base w-full sm:w-auto"
-                          disabled={isSubmitting}
-                        >
-                          Cancelar
-                        </Button>
-                        <Button 
-                          onClick={handleTransfer} 
-                          className="text-sm sm:text-base w-full sm:w-auto"
-                          disabled={isSubmitting || !transferQuantity || Number(transferQuantity) <= 0}
-                        >
-                          {isSubmitting ? 'Procesando...' : 'Realizar Transferencia'}
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </DialogContent>
-            </Dialog>
-
             <Dialog open={open} onOpenChange={(isOpen) => {
               if (isSubmitting) return;
               setOpen(isOpen);
@@ -1091,6 +966,30 @@ export default function Bodegas() {
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={() => openTransferDialog(product, 'salida')}
+                            className="flex-1 text-xs h-8"
+                            disabled={isSubmitting || product.stock_bodega <= 0}
+                            title="Transferir de bodega a inventario"
+                          >
+                            <ArrowRight className="h-3 w-3 mr-1" />
+                            Salida
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openTransferDialog(product, 'entrada')}
+                            className="flex-1 text-xs h-8"
+                            disabled={isSubmitting || product.stock <= 0}
+                            title="Transferir de inventario a bodega"
+                          >
+                            <ArrowLeft className="h-3 w-3 mr-1" />
+                            Entrada
+                          </Button>
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => setAddingStockProduct(product)}
                             className="flex-1 text-xs h-8"
                             disabled={isSubmitting}
@@ -1128,28 +1027,28 @@ export default function Bodegas() {
                 <Table className="w-full">
                   <TableHeader className="bg-muted/50">
                     <TableRow>
-                      <TableHead className="text-xs font-bold cursor-pointer w-[20%]" onClick={() => handleSort('nombre')}>
+                      <TableHead className="text-xs font-bold cursor-pointer w-[15%]" onClick={() => handleSort('nombre')}>
                         <div className="flex items-center">
                           Producto
                           {getSortIcon('nombre')}
                         </div>
                       </TableHead>
-                      <TableHead className="text-xs font-bold cursor-pointer w-[8%]" onClick={() => handleSort('talla')}>
+                      <TableHead className="text-xs font-bold cursor-pointer w-[6%]" onClick={() => handleSort('talla')}>
                         <div className="flex items-center">
                           Talla
                           {getSortIcon('talla')}
                         </div>
                       </TableHead>
-                      <TableHead className="text-xs font-bold cursor-pointer w-[10%]" onClick={() => handleSort('color')}>
+                      <TableHead className="text-xs font-bold cursor-pointer w-[8%]" onClick={() => handleSort('color')}>
                         <div className="flex items-center">
                           Color
                           {getSortIcon('color')}
                         </div>
                       </TableHead>
-                      <TableHead className="text-xs font-bold w-[8%]">Compra</TableHead>
-                      <TableHead className="text-xs font-bold w-[8%]">Venta</TableHead>
-                      <TableHead className="text-xs font-bold w-[8%]">Margen</TableHead>
-                      <TableHead className="text-xs font-bold w-[8%]">Margen %</TableHead>
+                      <TableHead className="text-xs font-bold w-[6%]">Compra</TableHead>
+                      <TableHead className="text-xs font-bold w-[6%]">Venta</TableHead>
+                      <TableHead className="text-xs font-bold w-[6%]">Margen</TableHead>
+                      <TableHead className="text-xs font-bold w-[6%]">Margen %</TableHead>
                       <TableHead className="text-xs font-bold cursor-pointer w-[6%]" onClick={() => handleSort('stock_bodega')}>
                         <div className="flex items-center">
                           Stock Bodega
@@ -1159,9 +1058,9 @@ export default function Bodegas() {
                       <TableHead className="text-xs font-bold w-[6%]">Mínimo Bodega</TableHead>
                       <TableHead className="text-xs font-bold w-[6%]">Stock Inv.</TableHead>
                       <TableHead className="text-xs font-bold w-[6%]">Mínimo Inv.</TableHead>
-                      <TableHead className="text-xs font-bold w-[9%]">Inversión Bodega</TableHead>
-                      <TableHead className="text-xs font-bold w-[9%]">Venta Potencial</TableHead>
-                      <TableHead className="text-xs font-bold w-[8%]">Utilidad</TableHead>
+                      <TableHead className="text-xs font-bold w-[7%]">Inversión Bodega</TableHead>
+                      <TableHead className="text-xs font-bold w-[7%]">Venta Potencial</TableHead>
+                      <TableHead className="text-xs font-bold w-[7%]">Utilidad</TableHead>
                       <TableHead className="text-xs font-bold w-[12%] text-center">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1229,8 +1128,29 @@ export default function Bodegas() {
                                   onClick={() => handleEdit(product)}
                                   className="h-7 w-7 p-0"
                                   disabled={isSubmitting}
+                                  title="Editar producto"
                                 >
                                   <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openTransferDialog(product, 'salida')}
+                                  className="h-7 w-7 p-0"
+                                  disabled={isSubmitting || product.stock_bodega <= 0}
+                                  title="Transferir de bodega a inventario"
+                                >
+                                  <ArrowRight className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openTransferDialog(product, 'entrada')}
+                                  className="h-7 w-7 p-0"
+                                  disabled={isSubmitting || product.stock <= 0}
+                                  title="Transferir de inventario a bodega"
+                                >
+                                  <ArrowLeft className="h-3 w-3" />
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1238,6 +1158,7 @@ export default function Bodegas() {
                                   onClick={() => setAddingStockProduct(product)}
                                   className="h-7 w-7 p-0"
                                   disabled={isSubmitting}
+                                  title="Agregar stock a bodega"
                                 >
                                   <PackagePlus className="h-3 w-3" />
                                 </Button>
@@ -1247,6 +1168,7 @@ export default function Bodegas() {
                                   onClick={() => setDeletingProductId(product.idproducto)}
                                   className="h-7 w-7 p-0"
                                   disabled={isSubmitting}
+                                  title="Eliminar producto"
                                 >
                                   <Trash2 className="h-3 w-3" />
                                 </Button>
@@ -1270,6 +1192,101 @@ export default function Bodegas() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Diálogo para transferencia directa */}
+        <Dialog open={transferDialog.open} onOpenChange={(isOpen) => {
+          if (isSubmitting) return;
+          setTransferDialog(prev => ({ ...prev, open: isOpen }));
+          if (!isOpen) {
+            setTransferDialog({
+              open: false,
+              product: null,
+              type: 'salida',
+              cantidad: ''
+            });
+          }
+        }}>
+          <DialogContent className="max-w-[95vw] sm:max-w-md rounded-lg mx-2 sm:mx-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">
+                Transferencia de Stock - {transferDialog.product?.nombre}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 sm:space-y-4">
+              <div className="p-3 bg-muted/30 rounded-lg">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Stock en Bodega:</span>
+                    <p className="font-medium">{transferDialog.product?.stock_bodega}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Stock en Inventario:</span>
+                    <p className="font-medium">{transferDialog.product?.stock}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Tipo de Transferencia:</span>
+                    <p className="font-medium text-blue-600">
+                      {transferDialog.type === 'salida' 
+                        ? 'Bodega → Inventario' 
+                        : 'Inventario → Bodega'}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Stock disponible:</span>
+                    <p className="font-medium text-green-600">
+                      {transferDialog.product 
+                        ? getAvailableStock(transferDialog.product, transferDialog.type)
+                        : 0} unidades
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm sm:text-base">Cantidad a transferir</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max={transferDialog.product ? getAvailableStock(transferDialog.product, transferDialog.type) : 0}
+                  value={transferDialog.cantidad}
+                  onChange={(e) => setTransferDialog(prev => ({ ...prev, cantidad: e.target.value }))}
+                  placeholder={`Máximo: ${transferDialog.product ? getAvailableStock(transferDialog.product, transferDialog.type) : 0}`}
+                  className="text-sm sm:text-base"
+                  disabled={isSubmitting}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {transferDialog.type === 'salida' 
+                    ? 'Se transferirá stock de bodega al inventario'
+                    : 'Se transferirá stock del inventario a bodega'}
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-2 pt-3 sm:pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setTransferDialog({
+                    open: false,
+                    product: null,
+                    type: 'salida',
+                    cantidad: ''
+                  })} 
+                  className="text-sm sm:text-base w-full sm:w-auto"
+                  disabled={isSubmitting}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={handleDirectTransfer} 
+                  className="text-sm sm:text-base w-full sm:w-auto"
+                  disabled={isSubmitting || !transferDialog.cantidad || Number(transferDialog.cantidad) <= 0}
+                >
+                  {isSubmitting ? 'Procesando...' : 'Realizar Transferencia'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Diálogo para agregar stock a bodega */}
         <Dialog open={!!addingStockProduct} onOpenChange={(isOpen) => {

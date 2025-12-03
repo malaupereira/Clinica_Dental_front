@@ -67,6 +67,16 @@ export interface TransferRequest {
   tipo: 'entrada' | 'salida'; // entrada: bodega -> inventario, salida: inventario -> bodega
 }
 
+// Nueva interfaz para transferencia directa desde tabla
+export interface DirectTransferRequest {
+  idproducto: number;
+  cantidad: number;
+  tipo: 'entrada' | 'salida';
+  // Campos adicionales para feedback inmediato
+  currentStock?: number;
+  currentBodegaStock?: number;
+}
+
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
@@ -182,6 +192,19 @@ export const transferStock = async (
   } catch (error) {
     console.error("Error transferring stock:", error);
     throw new Error("No se pudo transferir el stock");
+  }
+};
+
+// Nueva función para transferencia directa desde tabla
+export const directTransferStock = async (
+  transfer: DirectTransferRequest
+): Promise<{ success: boolean; message: string; updatedProduct?: BodegaProduct }> => {
+  try {
+    const response = await api.post("/bodegas/direct-transfer", transfer);
+    return response.data;
+  } catch (error) {
+    console.error("Error in direct transfer:", error);
+    throw new Error("No se pudo realizar la transferencia");
   }
 };
 
