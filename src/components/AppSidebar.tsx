@@ -11,7 +11,8 @@ import {
   DollarSign,
   FileSpreadsheet,
   ArrowRightLeft,
-  LogOut
+  LogOut,
+  Warehouse
 } from 'lucide-react';
 import {
   Sidebar,
@@ -43,6 +44,7 @@ const clinicItems = [
 const batasItems = [
   { title: 'Registrar Venta', url: '/batas/register', icon: ShoppingBag },
   { title: 'Inventario', url: '/batas/inventory', icon: Package },
+  { title: 'Bodegas', url: '/batas/bodegas', icon: Warehouse },
 ];
 
 const adminItems = [

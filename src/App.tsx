@@ -19,6 +19,7 @@ import Doctors from "./pages/clinic/Doctors";
 // Batas
 import RegisterSale from "./pages/batas/RegisterSale";
 import Inventory from "./pages/batas/Inventory";
+import Bodegas from "./pages/batas/bodegas";
 
 // Admin
 import Records from "./pages/admin/Records";
@@ -71,6 +72,7 @@ const AppContent = () => {
                       {/* Batas Routes */}
                       <Route path="/batas/register" element={<RegisterSale />} />
                       <Route path="/batas/inventory" element={<Inventory />} />
+                      <Route path="/batas/bodegas" element={<Bodegas />} />
                       
                       {/* Admin Routes */}
                       <Route path="/admin/records" element={<Records />} />
