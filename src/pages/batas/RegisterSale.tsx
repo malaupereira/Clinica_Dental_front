@@ -376,11 +376,11 @@ export default function RegisterSale() {
                   ) : displayProducts.length > 0 ? (
                     <div className="border rounded-lg overflow-hidden">
                       <div className="grid grid-cols-12 bg-muted/50 p-3 text-sm font-medium text-muted-foreground border-b">
-                        <div className="col-span-5">Producto</div>
+                        <div className="col-span-4">Producto</div>
                         <div className="col-span-2 text-center">Talla</div>
                         <div className="col-span-2 text-center">Color</div>
                         <div className="col-span-2 text-right">Precio</div>
-                        <div className="col-span-1"></div>
+                        <div className="col-span-2 text-right">Acción</div>
                       </div>
                       {displayProducts.map(product => {
                         const isOutOfStock = product.stock === 0;
@@ -391,7 +391,7 @@ export default function RegisterSale() {
                               isOutOfStock ? 'bg-gray-50' : ''
                             }`}
                           >
-                            <div className="col-span-5">
+                            <div className="col-span-4">
                               <div className="font-medium">{product.name}</div>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className={`text-xs px-2 py-0.5 rounded ${
@@ -425,16 +425,16 @@ export default function RegisterSale() {
                                 <span className="text-muted-foreground text-sm">-</span>
                               )}
                             </div>
-                            <div className="col-span-2 text-right">
+                            <div className="col-span-2 text-right pr-2">
                               <div className="font-bold text-primary">Bs. {product.salePrice}</div>
                             </div>
-                            <div className="col-span-1 text-right">
+                            <div className="col-span-2 text-right">
                               <Button 
                                 onClick={() => addToCart(product.id)} 
                                 size="sm"
                                 disabled={isOutOfStock}
                                 variant={isOutOfStock ? "outline" : "default"}
-                                className="h-8 w-auto px-0.5" // Cambios aquí
+                                className="h-8 w-auto px-3" 
                               >
                                 <Plus className="h-3 w-3 mr-1" />
                                 Agregar
