@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Minus, Plus, ShoppingCart, Search, Percent, Package } from 'lucide-react';
+import { Minus, Plus, ShoppingCart, Search, Percent, Package, Trash2 } from 'lucide-react';
 import { searchProducts, createSale, SaleRequest } from '@/api/SalesApi';
 import {
   AlertDialog,
@@ -70,7 +70,8 @@ export default function RegisterSale() {
       setIsSearching(true);
       try {
         const results = await searchProducts(searchQuery);
-        setSearchResults(results.filter(p => p.stock > 0));
+        // Mostrar todos los productos encontrados, incluso con stock 0
+        setSearchResults(results);
       } catch (error) {
         console.error('Error searching products:', error);
         toast.error('Error al buscar productos');
@@ -87,7 +88,12 @@ export default function RegisterSale() {
   const addToCart = (productId: string) => {
     const allProducts = [...products, ...searchResults];
     const product = allProducts.find(p => p.id === productId);
-    if (!product || product.stock === 0) {
+    if (!product) {
+      toast.error('Producto no encontrado');
+      return;
+    }
+    
+    if (product.stock === 0) {
       toast.error('Producto sin stock');
       return;
     }
@@ -118,6 +124,11 @@ export default function RegisterSale() {
         });
       }
     }, 100);
+  };
+
+  const removeFromCart = (productId: string) => {
+    setCart(cart.filter(item => item.productId !== productId));
+    toast.success('Producto eliminado del carrito');
   };
 
   const updateQuantity = (productId: string, newQuantity: number) => {
@@ -230,86 +241,86 @@ export default function RegisterSale() {
   };
 
   const confirmSale = async () => {
-  setShowConfirmation(false);
-  setIsSubmitting(true);
-  setLoading(true);
-  
-  try {
-    const currentSubtotal = calculateSubtotal();
-    const currentDiscountAmount = calculateDiscountAmount();
-    const currentTotal = Math.max(0, currentSubtotal - currentDiscountAmount);
+    setShowConfirmation(false);
+    setIsSubmitting(true);
+    setLoading(true);
+    
+    try {
+      const currentSubtotal = calculateSubtotal();
+      const currentDiscountAmount = calculateDiscountAmount();
+      const currentTotal = Math.max(0, currentSubtotal - currentDiscountAmount);
 
-    if (paymentMethod === 'Mixto' && (cashAmount + qrAmount !== currentTotal)) {
-      toast.error('La suma de efectivo y QR debe ser igual al total');
+      if (paymentMethod === 'Mixto' && (cashAmount + qrAmount !== currentTotal)) {
+        toast.error('La suma de efectivo y QR debe ser igual al total');
+        setIsSubmitting(false);
+        setLoading(false);
+        return;
+      }
+
+      const allProducts = [...products, ...searchResults];
+      const productosData = cart.map(item => {
+        const product = allProducts.find(p => p.id === item.productId);
+        return {
+          idproducto: parseInt(item.productId),
+          cantidad: item.quantity,
+          precio_unitario: product?.salePrice || 0
+        };
+      });
+
+      let detalles = 'Venta de productos: ';
+      detalles += cart.map(item => {
+        const product = allProducts.find(p => p.id === item.productId);
+        const detallesProducto = [];
+        if (product?.talla) detallesProducto.push(`Talla: ${product.talla}`);
+        if (product?.color) detallesProducto.push(`Color: ${product.color}`);
+        const detallesStr = detallesProducto.length > 0 ? ` (${detallesProducto.join(', ')})` : '';
+        return `${product?.name}${detallesStr} x${item.quantity}`;
+      }).join(', ');
+
+      if (discount > 0) {
+        detalles += ` - Descuento: ${discount}${discountType === 'percentage' ? '%' : ' Bs.'}`;
+      }
+
+      const saleData: SaleRequest = {
+        idusuario: user?.idUsuario || 0,
+        detalles: detalles,
+        metodo_pago: paymentMethod,
+        monto_total: currentTotal,
+        monto_efectivo: paymentMethod === 'QR' ? 0 : (paymentMethod === 'Mixto' ? cashAmount : currentTotal),
+        monto_qr: paymentMethod === 'Efectivo' ? 0 : (paymentMethod === 'Mixto' ? qrAmount : currentTotal),
+        productos: productosData
+      };
+
+      const result = await createSale(saleData);
+
+      if (result.success) {
+        toast.success('Venta registrada exitosamente');
+        
+        await Promise.all([
+          refreshProducts(),
+          refreshBatasRecords(),
+          refreshTransactions()
+        ]);
+
+        setCart([]);
+        setPaymentMethod('Efectivo');
+        setCashAmount(0);
+        setQrAmount(0);
+        setDiscount(0);
+        setDiscountType('percentage');
+        setSearchQuery('');
+        setSearchResults([]);
+      } else {
+        toast.error('Error al registrar la venta');
+      }
+    } catch (error) {
+      console.error('Error al registrar venta:', error);
+      toast.error('Error al registrar la venta');
+    } finally {
       setIsSubmitting(false);
       setLoading(false);
-      return;
     }
-
-    const allProducts = [...products, ...searchResults];
-    const productosData = cart.map(item => {
-      const product = allProducts.find(p => p.id === item.productId);
-      return {
-        idproducto: parseInt(item.productId),
-        cantidad: item.quantity,
-        precio_unitario: product?.salePrice || 0
-      };
-    });
-
-    let detalles = 'Venta de productos: ';
-    detalles += cart.map(item => {
-      const product = allProducts.find(p => p.id === item.productId);
-      const detallesProducto = [];
-      if (product?.talla) detallesProducto.push(`Talla: ${product.talla}`);
-      if (product?.color) detallesProducto.push(`Color: ${product.color}`);
-      const detallesStr = detallesProducto.length > 0 ? ` (${detallesProducto.join(', ')})` : '';
-      return `${product?.name}${detallesStr} x${item.quantity}`;
-    }).join(', ');
-
-    if (discount > 0) {
-      detalles += ` - Descuento: ${discount}${discountType === 'percentage' ? '%' : ' Bs.'}`;
-    }
-
-    const saleData: SaleRequest = {
-      idusuario: user?.idUsuario || 0,
-      detalles: detalles,
-      metodo_pago: paymentMethod,
-      monto_total: currentTotal,
-      monto_efectivo: paymentMethod === 'QR' ? 0 : (paymentMethod === 'Mixto' ? cashAmount : currentTotal),
-      monto_qr: paymentMethod === 'Efectivo' ? 0 : (paymentMethod === 'Mixto' ? qrAmount : currentTotal),
-      productos: productosData
-    };
-
-    const result = await createSale(saleData);
-
-    if (result.success) {
-      toast.success('Venta registrada exitosamente');
-      
-      await Promise.all([
-        refreshProducts(),
-        refreshBatasRecords(),
-        refreshTransactions()
-      ]);
-
-      setCart([]);
-      setPaymentMethod('Efectivo');
-      setCashAmount(0);
-      setQrAmount(0);
-      setDiscount(0);
-      setDiscountType('percentage');
-      setSearchQuery('');
-      setSearchResults([]);
-    } else {
-      toast.error('Error al registrar la venta');
-    }
-  } catch (error) {
-    console.error('Error al registrar venta:', error);
-    toast.error('Error al registrar la venta');
-  } finally {
-    setIsSubmitting(false);
-    setLoading(false);
-  }
-};
+  };
 
   const cancelSale = () => {
     setShowConfirmation(false);
@@ -318,6 +329,18 @@ export default function RegisterSale() {
   const displayProducts = searchQuery ? searchResults : [];
   const allProducts = [...products, ...searchResults];
   const canCompleteSale = cart.length > 0 && !cart.some(item => item.quantity === 0);
+
+  // Función para obtener el nombre completo del producto con talla y color
+  const getFullProductName = (product: Product) => {
+    let fullName = product.name;
+    if (product.talla) {
+      fullName += ` ${product.talla}`;
+    }
+    if (product.color) {
+      fullName += ` ${product.color}`;
+    }
+    return fullName;
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -337,7 +360,7 @@ export default function RegisterSale() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Buscar producto..."
+                  placeholder="Buscar producto, talla o color..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -345,49 +368,84 @@ export default function RegisterSale() {
               </div>
               
               {searchQuery ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
                   {isSearching ? (
-                    <div className="col-span-2 text-center py-8 text-muted-foreground">
+                    <div className="text-center py-8 text-muted-foreground">
                       Buscando productos...
                     </div>
                   ) : displayProducts.length > 0 ? (
-                    displayProducts.map(product => (
-                      <div key={product.id} className="p-4 border rounded-lg hover:border-primary transition-colors">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex-1">
-                            <h3 className="font-semibold">{product.name}</h3>
-                            <div className="flex flex-wrap gap-2 mt-1">
-                              {product.talla && (
-                                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                                  Talla: {product.talla}
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="grid grid-cols-12 bg-muted/50 p-3 text-sm font-medium text-muted-foreground border-b">
+                        <div className="col-span-5">Producto</div>
+                        <div className="col-span-2 text-center">Talla</div>
+                        <div className="col-span-2 text-center">Color</div>
+                        <div className="col-span-2 text-right">Precio</div>
+                        <div className="col-span-1"></div>
+                      </div>
+                      {displayProducts.map(product => {
+                        const isOutOfStock = product.stock === 0;
+                        return (
+                          <div 
+                            key={product.id} 
+                            className={`grid grid-cols-12 items-center p-3 border-b hover:bg-muted/30 transition-colors ${
+                              isOutOfStock ? 'bg-gray-50' : ''
+                            }`}
+                          >
+                            <div className="col-span-5">
+                              <div className="font-medium">{product.name}</div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className={`text-xs px-2 py-0.5 rounded ${
+                                  isOutOfStock 
+                                    ? 'bg-red-100 text-red-800' 
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                  Stock: {product.stock}
                                 </span>
-                              )}
-                              {product.color && (
-                                <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                                  Color: {product.color}
+                                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-800 rounded flex items-center">
+                                  <Package className="h-3 w-3 mr-1" />
+                                  Bodega: {product.warehouseStock || 0}
                                 </span>
+                              </div>
+                            </div>
+                            <div className="col-span-2 text-center">
+                              {product.talla ? (
+                                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">
+                                  {product.talla}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">-</span>
                               )}
                             </div>
-                            <p className="text-2xl font-bold text-primary mt-2">Bs. {product.salePrice}</p>
+                            <div className="col-span-2 text-center">
+                              {product.color ? (
+                                <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm">
+                                  {product.color}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">-</span>
+                              )}
+                            </div>
+                            <div className="col-span-2 text-right">
+                              <div className="font-bold text-primary">Bs. {product.salePrice}</div>
+                            </div>
+                            <div className="col-span-1 text-right">
+                              <Button 
+                                onClick={() => addToCart(product.id)} 
+                                size="sm"
+                                disabled={isOutOfStock}
+                                variant={isOutOfStock ? "outline" : "default"}
+                                className="h-8 w-auto px-0.5" // Cambios aquí
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Agregar
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex flex-col items-end gap-1">
-                            <span className="px-2 py-1 bg-muted rounded text-sm">
-                              Stock: {product.stock}
-                            </span>
-                            <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-sm">
-                              <Package className="h-3 w-3 inline-block mr-1" />
-                              Bodega: {product.warehouseStock || 0}
-                            </span>
-                          </div>
-                        </div>
-                        <Button onClick={() => addToCart(product.id)} className="w-full" size="sm">
-                          <Plus className="h-4 w-4 mr-2" />
-                          Agregar
-                        </Button>
-                      </div>
-                    ))
+                        );
+                      })}
+                    </div>
                   ) : (
-                    <div className="col-span-2 text-center py-8 text-muted-foreground">
+                    <div className="text-center py-8 text-muted-foreground">
                       No se encontraron productos que coincidan con "{searchQuery}"
                     </div>
                   )}
@@ -396,7 +454,7 @@ export default function RegisterSale() {
                 <div className="text-center py-12 text-muted-foreground">
                   <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="text-lg">Ingrese un término de búsqueda para ver los productos</p>
-                  <p className="text-sm mt-2">Busque por nombre de producto</p>
+                  <p className="text-sm mt-2">Busque por nombre, talla o color del producto</p>
                 </div>
               )}
             </CardContent>
@@ -420,37 +478,51 @@ export default function RegisterSale() {
                     {cart.map(item => {
                       const product = allProducts.find(p => p.id === item.productId);
                       if (!product) return null;
+                      const totalPrice = product.salePrice * item.quantity;
                       return (
                         <div key={item.productId} className="p-3 bg-muted rounded-lg">
                           <div className="flex justify-between items-start mb-2">
                             <div className="flex-1">
-                              <span className="font-medium text-sm block">{product.name}</span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {product.talla && (
-                                  <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
-                                    Talla: {product.talla}
-                                  </span>
-                                )}
-                                {product.color && (
-                                  <span className="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-xs">
-                                    Color: {product.color}
-                                  </span>
-                                )}
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span className="font-medium text-sm block">{product.name}</span>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {product.talla && (
+                                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                                        Talla: {product.talla}
+                                      </span>
+                                    )}
+                                    {product.color && (
+                                      <span className="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-xs">
+                                        Color: {product.color}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => removeFromCart(item.productId)}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
                               </div>
                             </div>
-                            <div className="flex flex-col items-end gap-1">
-                              <span className="font-bold">Bs. {(product.salePrice * item.quantity).toFixed(2)}</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">
-                                  Stock: {product.stock}
+                          </div>
+                          <div className="flex flex-col items-end gap-1 mb-2">
+                            <span className="font-bold">Bs. {totalPrice.toFixed(2)}</span>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs ${product.stock === 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+                                Stock: {product.stock}
+                              </span>
+                              {product.warehouseStock !== undefined && (
+                                <span className="text-xs text-gray-600 flex items-center">
+                                  <Package className="h-2.5 w-2.5 mr-0.5" />
+                                  Bodega: {product.warehouseStock}
                                 </span>
-                                {product.warehouseStock !== undefined && (
-                                  <span className="text-xs text-gray-600 flex items-center">
-                                    <Package className="h-2.5 w-2.5 mr-0.5" />
-                                    Bodega: {product.warehouseStock}
-                                  </span>
-                                )}
-                              </div>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center justify-between">
@@ -628,7 +700,7 @@ export default function RegisterSale() {
                   const product = allProducts.find(p => p.id === item.productId);
                   return product ? (
                     <li key={item.productId}>
-                      {product.name} x{item.quantity} - Bs. {(product.salePrice * item.quantity).toFixed(2)}
+                      {getFullProductName(product)} x{item.quantity} - Bs. {(product.salePrice * item.quantity).toFixed(2)}
                     </li>
                   ) : null;
                 })}
