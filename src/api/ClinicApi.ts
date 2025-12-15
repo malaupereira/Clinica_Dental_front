@@ -1,3 +1,4 @@
+// src/api/ClinicApi.ts
 import axios from "axios";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
@@ -18,6 +19,7 @@ export interface ServiceWithCommissions {
   serviceId: string;
   specialtyId: string;
   price: number;
+  quantity: number;
   commissions: DoctorCommission[];
 }
 
@@ -33,6 +35,7 @@ export interface ConsultationRequest {
     idservicio: number;
     cantidad: number;
     precio_unitario: number;
+    subtotal: number;
     doctores_comisiones?: Array<{
       iddoctor: number;
       porcentaje: number;

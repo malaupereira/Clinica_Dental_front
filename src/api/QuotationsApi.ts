@@ -19,6 +19,7 @@ interface BackendQuotationService {
   idcotizacion: number;
   idservicio: number;
   precio: string;
+  cantidad: string;
   nombre_servicio: string;
   nombre_especialidad: string;
   idespecialidad: number;
@@ -43,6 +44,13 @@ interface BackendQuotationPayment {
   qr_amount: string;
   detalles: string;
   doctor_commissions: { [key: string]: string };
+  service_details?: Array<{
+    idservicio: number;
+    cantidad: string;
+    precio_unitario: string;
+    subtotal: string;
+    nombre_servicio: string;
+  }>;
 }
 
 export interface Quotation {
@@ -66,6 +74,7 @@ export interface QuotationService {
   specialtyId: string;
   specialtyName: string;
   price: number;
+  quantity: number;
   commissions: ServiceCommission[];
 }
 
@@ -76,6 +85,7 @@ export interface ServiceCommission {
   percentage: number;
   amount: number;
   pendingAmount: number;
+  commissionType: 'percentage' | 'amount';
 }
 
 export interface QuotationPayment {
@@ -85,6 +95,13 @@ export interface QuotationPayment {
   paymentMethod: 'Efectivo' | 'QR' | 'Mixto';
   details: string;
   doctorCommissions: { [key: string]: number };
+  serviceDetails?: Array<{
+    serviceId: string;
+    quantity: number;
+    price: number;
+    subtotal: number;
+    serviceName: string;
+  }>;
   cashAmount?: number;
   qrAmount?: number;
 }
@@ -280,6 +297,7 @@ function mapBackendQuotation(
       specialtyId: service.idespecialidad.toString(),
       specialtyName: service.nombre_especialidad,
       price: parseFloat(service.precio),
+      quantity: Number(service.cantidad) || 1, // <-- IMPORTANTE: Ahora usamos el campo cantidad de la BD
       commissions: [] // Se llenará después con loadServiceCommissions
     })),
     payments: payments.map(payment => ({
@@ -291,6 +309,13 @@ function mapBackendQuotation(
       doctorCommissions: Object.fromEntries(
         Object.entries(payment.doctor_commissions || {}).map(([key, value]) => [key, parseFloat(value)])
       ),
+      serviceDetails: payment.service_details?.map(detail => ({
+        serviceId: detail.idservicio.toString(),
+        quantity: Number(detail.cantidad) || 1,
+        price: parseFloat(detail.precio_unitario),
+        subtotal: parseFloat(detail.subtotal),
+        serviceName: detail.nombre_servicio
+      })),
       cashAmount: payment.cash_amount ? parseFloat(payment.cash_amount) : undefined,
       qrAmount: payment.qr_amount ? parseFloat(payment.qr_amount) : undefined
     }))
@@ -312,7 +337,8 @@ export const loadServiceCommissions = async (quotation: Quotation): Promise<Quot
               doctorName: comm.nombre_doctor,
               percentage: parseFloat(comm.porcentaje),
               amount: parseFloat(comm.total_comision),
-              pendingAmount: parseFloat(comm.comision_pendiente)
+              pendingAmount: parseFloat(comm.comision_pendiente),
+              commissionType: 'percentage' as const // La BD no tiene tipo, siempre es porcentaje
             }))
           };
         } catch (error) {

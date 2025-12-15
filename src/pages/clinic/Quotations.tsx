@@ -357,6 +357,11 @@ export default function Quotations() {
     return Number(quotation.total) - getTotalCommissions(quotation);
   };
 
+  // Calculate subtotal for a service (price * quantity)
+  const calculateServiceSubtotal = (service: any) => {
+    return Math.round(Number(service.price) * Number(service.quantity || 1));
+  };
+
   // Update doctor commission in payment
   const updateDoctorCommission = (doctorId: string, amount: number) => {
     if (isSubmitting) return;
@@ -593,16 +598,33 @@ export default function Quotations() {
                 <Label className="font-semibold">Servicios:</Label>
                 <div className="border rounded-md p-3 mt-2 max-h-60 overflow-y-auto">
                   {selectedQuotation.services.map((service: any, idx: number) => {
+                    const serviceSubtotal = calculateServiceSubtotal(service);
                     const serviceCommissions = service.commissions.reduce((sum: number, comm: any) => sum + (Number(comm.amount) || 0), 0);
-                    const serviceNet = Number(service.price) - serviceCommissions;
+                    const serviceNet = serviceSubtotal - serviceCommissions;
+                    const quantity = Number(service.quantity) || 1;
+                    
                     return (
                       <div key={idx} className="py-2 border-b last:border-b-0">
                         <div className="flex justify-between">
-                          <span className="font-medium">{service.serviceName}</span>
-                          <span>Bs. {Number(service.price).toFixed(2)}</span>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {service.specialtyName}
+                          <div>
+                            <span className="font-medium">
+                              {service.serviceName}
+                              {quantity > 1 && (
+                                <span className="text-sm text-muted-foreground ml-1">x{quantity}</span>
+                              )}
+                            </span>
+                            <div className="text-sm text-muted-foreground">
+                              {service.specialtyName}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div>Bs. {serviceSubtotal.toFixed(2)}</div>
+                            {quantity > 1 && (
+                              <div className="text-xs text-muted-foreground">
+                                (Bs. {Number(service.price).toFixed(2)} x {quantity})
+                              </div>
+                            )}
+                          </div>
                         </div>
                         {service.commissions.length > 0 && (
                           <div className="text-xs text-blue-600 mt-1">
@@ -678,6 +700,26 @@ export default function Quotations() {
                             </div>
                           </div>
                         </div>
+                        
+                        {/* Detalles de servicios en el pago */}
+                        {payment.serviceDetails && payment.serviceDetails.length > 0 && (
+                          <div className="mt-3 text-sm">
+                            <div className="text-muted-foreground text-xs mb-1">Servicios incluidos:</div>
+                            <div className="space-y-1 pl-2 border-l-2 border-gray-200">
+                              {payment.serviceDetails.map((detail: any, idx: number) => (
+                                <div key={idx} className="flex justify-between text-xs">
+                                  <span>
+                                    {detail.serviceName}
+                                    {detail.quantity > 1 && (
+                                      <span className="text-muted-foreground ml-1">x{detail.quantity}</span>
+                                    )}
+                                  </span>
+                                  <span>Bs. {Number(detail.subtotal).toFixed(2)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         
                         {/* Comisiones por doctor en este pago */}
                         {payment.doctorCommissions && Object.keys(payment.doctorCommissions).length > 0 && (

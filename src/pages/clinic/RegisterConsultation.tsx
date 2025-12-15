@@ -1,3 +1,4 @@
+// src/pages/admin/RegisterClinic.tsx
 import { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AppContext';
@@ -16,12 +17,16 @@ interface ServiceCommission {
   doctorId: string;
   percentage: number;
   amount: number;
+  commissionType: 'percentage' | 'amount';
 }
 
 interface ServiceWithCommissions {
   serviceId: string;
   specialtyId: string;
+  specialtyName?: string;
+  serviceName?: string;
   price: number;
+  quantity: number;
   commissions: ServiceCommission[];
 }
 
@@ -75,13 +80,16 @@ export default function RegisterConsultation() {
         setServices(services.map(service => {
           const hasSpecialty = (doctor.specialtyIds || []).includes(service.specialtyId);
           if (hasSpecialty && service.specialtyId) {
-            return {
-              ...service,
-              commissions: [
-                ...service.commissions,
-                { doctorId, percentage: 0, amount: 0 }
-              ]
-            };
+            const existingCommission = service.commissions.find(comm => comm.doctorId === doctorId);
+            if (!existingCommission) {
+              return {
+                ...service,
+                commissions: [
+                  ...service.commissions,
+                  { doctorId, percentage: 0, amount: 0, commissionType: 'percentage' }
+                ]
+              };
+            }
           }
           return service;
         }));
@@ -96,12 +104,13 @@ export default function RegisterConsultation() {
       serviceId: '',
       specialtyId: '',
       price: 0,
+      quantity: 1,
       commissions: selectedDoctors
         .filter(doctorId => {
           const doctor = doctors.find(d => d.id === doctorId);
           return doctor?.paymentType === 'comision';
         })
-        .map(doctorId => ({ doctorId, percentage: 0, amount: 0 }))
+        .map(doctorId => ({ doctorId, percentage: 0, amount: 0, commissionType: 'percentage' }))
     };
     setServices([...services, newService]);
   };
@@ -112,37 +121,72 @@ export default function RegisterConsultation() {
     setServices(services.filter((_, i) => i !== index));
   };
 
-  const updateService = (index: number, field: 'serviceId' | 'price', value: string | number) => {
+  const updateService = (index: number, field: 'serviceId' | 'price' | 'quantity', value: string | number) => {
     if (isSubmitting) return;
     
     const newServices = [...services];
     if (field === 'serviceId') {
       const service = availableServices.find(s => s.id === value);
-      const serviceCommissions = selectedDoctors
-        .filter(doctorId => {
-          const doctor = doctors.find(d => d.id === doctorId);
-          return doctor?.paymentType === 'comision' && 
-                 (doctor.specialtyIds || []).includes(service?.specialtyId || '');
-        })
-        .map(doctorId => ({ doctorId, percentage: 0, amount: 0 }));
-
-      newServices[index] = {
-        serviceId: value as string,
-        specialtyId: service?.specialtyId || '',
-        price: service?.price || 0,
-        commissions: serviceCommissions
-      };
-    } else {
-      newServices[index].price = value as number;
-      newServices[index].commissions = newServices[index].commissions.map(comm => ({
-        ...comm,
-        amount: (newServices[index].price * comm.percentage) / 100
-      }));
+      if (service) {
+        newServices[index] = {
+          serviceId: value as string,
+          serviceName: service.name,
+          specialtyId: service.specialtyId,
+          specialtyName: service.specialtyName,
+          price: service.price || 0,
+          quantity: newServices[index].quantity || 1,
+          commissions: selectedDoctors
+            .filter(doctorId => {
+              const doctor = doctors.find(d => d.id === doctorId);
+              return doctor?.paymentType === 'comision' && 
+                     (doctor.specialtyIds || []).includes(service.specialtyId);
+            })
+            .map(doctorId => ({ doctorId, percentage: 0, amount: 0, commissionType: 'percentage' }))
+        };
+      }
+    } else if (field === 'price') {
+      const numValue = Number(value) || 0;
+      newServices[index].price = numValue;
+      newServices[index].commissions = newServices[index].commissions.map(comm => {
+        const serviceSubtotal = calculateServiceSubtotal(newServices[index]);
+        if (comm.commissionType === 'percentage') {
+          const amount = (serviceSubtotal * comm.percentage) / 100;
+          return { ...comm, amount };
+        } else {
+          return { ...comm, amount: comm.amount };
+        }
+      });
+    } else if (field === 'quantity') {
+      if (value === '') {
+        newServices[index].quantity = '' as any;
+      } else {
+        const intValue = Math.round(Number(value) || 1);
+        if (intValue < 1) {
+          toast.error('La cantidad no puede ser menor a 1');
+          return;
+        }
+        newServices[index].quantity = intValue;
+        newServices[index].commissions = newServices[index].commissions.map(comm => {
+          const serviceSubtotal = calculateServiceSubtotal(newServices[index]);
+          if (comm.commissionType === 'percentage') {
+            const amount = (serviceSubtotal * comm.percentage) / 100;
+            return { ...comm, amount };
+          } else {
+            const amountPerUnit = comm.amount / (newServices[index].quantity || 1);
+            const newTotalAmount = amountPerUnit * intValue;
+            return { ...comm, amount: newTotalAmount };
+          }
+        });
+      }
     }
     setServices(newServices);
   };
 
-  const updateCommissionPercentage = (serviceIndex: number, doctorId: string, percentage: number) => {
+  const calculateServiceSubtotal = (service: ServiceWithCommissions) => {
+    return Math.round(Number(service.price) * Number(service.quantity || 1));
+  };
+
+  const updateCommission = (serviceIndex: number, doctorId: string, value: number, type: 'percentage' | 'amount') => {
     if (isSubmitting) return;
     
     const newServices = [...services];
@@ -150,26 +194,88 @@ export default function RegisterConsultation() {
     const commissionIndex = service.commissions.findIndex(comm => comm.doctorId === doctorId);
     
     if (commissionIndex !== -1) {
-      newServices[serviceIndex].commissions[commissionIndex] = {
-        doctorId,
-        percentage,
-        amount: (service.price * percentage) / 100
-      };
+      const serviceSubtotal = calculateServiceSubtotal(service);
+      
+      if (type === 'percentage') {
+        if (value > 100) {
+          toast.error('El porcentaje no puede ser mayor a 100%');
+          return;
+        }
+        const amount = (serviceSubtotal * value) / 100;
+        newServices[serviceIndex].commissions[commissionIndex] = {
+          doctorId,
+          percentage: value,
+          amount,
+          commissionType: 'percentage'
+        };
+      } else {
+        const maxAmount = serviceSubtotal;
+        if (value > maxAmount) {
+          toast.error(`El monto no puede exceder Bs. ${maxAmount}`);
+          return;
+        }
+        const percentage = serviceSubtotal > 0 ? (value / serviceSubtotal) * 100 : 0;
+        newServices[serviceIndex].commissions[commissionIndex] = {
+          doctorId,
+          percentage,
+          amount: value,
+          commissionType: 'amount'
+        };
+      }
+      
       setServices(newServices);
     }
   };
 
-  // Calcular total de comisiones por servicio
+  const toggleCommissionType = (serviceIndex: number, doctorId: string) => {
+    if (isSubmitting) return;
+    
+    const newServices = [...services];
+    const service = newServices[serviceIndex];
+    const commissionIndex = service.commissions.findIndex(comm => comm.doctorId === doctorId);
+    
+    if (commissionIndex !== -1) {
+      const commission = service.commissions[commissionIndex];
+      const newType = commission.commissionType === 'percentage' ? 'amount' : 'percentage';
+      const serviceSubtotal = calculateServiceSubtotal(service);
+      
+      if (newType === 'amount') {
+        const percentage = serviceSubtotal > 0 ? (commission.amount / serviceSubtotal) * 100 : 0;
+        newServices[serviceIndex].commissions[commissionIndex] = {
+          ...commission,
+          commissionType: newType,
+          percentage
+        };
+      } else {
+        const amount = (serviceSubtotal * commission.percentage) / 100;
+        newServices[serviceIndex].commissions[commissionIndex] = {
+          ...commission,
+          commissionType: newType,
+          amount
+        };
+      }
+      
+      setServices(newServices);
+    }
+  };
+
+  const getTotalCommissionPercentage = (service: ServiceWithCommissions) => {
+    const serviceSubtotal = calculateServiceSubtotal(service);
+    if (serviceSubtotal === 0) return 0;
+    const totalCommissionAmount = service.commissions.reduce((sum, comm) => sum + comm.amount, 0);
+    return (totalCommissionAmount / serviceSubtotal) * 100;
+  };
+
   const getServiceCommissionsTotal = (service: ServiceWithCommissions) => {
     return service.commissions.reduce((sum, comm) => sum + comm.amount, 0);
   };
 
-  // Calcular total neto por servicio (precio - comisiones)
   const getServiceNetTotal = (service: ServiceWithCommissions) => {
-    return service.price - getServiceCommissionsTotal(service);
+    const serviceSubtotal = calculateServiceSubtotal(service);
+    return serviceSubtotal - getServiceCommissionsTotal(service);
   };
 
-  const total = services.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
+  const total = services.reduce((sum, service) => sum + calculateServiceSubtotal(service), 0);
 
   const handleCashAmountChange = (value: number) => {
     if (isSubmitting) return;
@@ -198,17 +304,28 @@ export default function RegisterConsultation() {
       return;
     }
 
+    const hasInvalidQuantity = services.some(service => 
+      service.quantity < 1 || !Number.isInteger(service.quantity)
+    );
+
+    if (hasInvalidQuantity) {
+      toast.error('Por favor ingrese una cantidad válida para todos los servicios (mínimo 1)');
+      return;
+    }
+
     if (paymentMethod === 'Mixto' && (cashAmount + qrAmount !== total)) {
       toast.error('La suma de efectivo y QR debe ser igual al total');
       return;
     }
 
-    const hasMissingCommissions = services.some(service => {
-      return service.commissions.some(comm => comm.percentage === 0 && service.price > 0);
+    const hasInvalidCommissions = services.some(service => {
+      const serviceSubtotal = calculateServiceSubtotal(service);
+      const totalCommissionAmount = getServiceCommissionsTotal(service);
+      return totalCommissionAmount > serviceSubtotal;
     });
 
-    if (hasMissingCommissions) {
-      toast.error('Complete los porcentajes de comisión para todos los doctores');
+    if (hasInvalidCommissions) {
+      toast.error('Las comisiones no pueden superar el total del servicio');
       return;
     }
 
@@ -229,17 +346,16 @@ export default function RegisterConsultation() {
         doctors.find(d => d.id === doctorId)?.name
       ).join(', ');
 
-      // Detalles simplificados sin comisiones
       let detalles = `Consulta - Drs. ${doctorNames}`;
       
       if (paymentMethod === 'Mixto') {
         detalles += ` - Mixto (Efectivo: Bs. ${cashAmount.toFixed(2)}, QR: Bs. ${qrAmount.toFixed(2)})`;
       }
 
-      // Preparar datos para la API
       const serviciosData = services.map(service => {
+        const serviceSubtotal = calculateServiceSubtotal(service);
         const doctoresComisiones = service.commissions
-          .filter(comm => comm.percentage > 0)
+          .filter(comm => comm.amount > 0)
           .map(comm => ({
             iddoctor: parseInt(comm.doctorId),
             porcentaje: comm.percentage,
@@ -248,8 +364,9 @@ export default function RegisterConsultation() {
 
         return {
           idservicio: parseInt(service.serviceId),
-          cantidad: 1,
+          cantidad: service.quantity || 1,
           precio_unitario: service.price,
+          subtotal: serviceSubtotal,
           doctores_comisiones: doctoresComisiones.length > 0 ? doctoresComisiones : undefined
         };
       });
@@ -265,20 +382,17 @@ export default function RegisterConsultation() {
         servicios: serviciosData
       };
 
-      // Registrar la consulta en el backend
       const result = await createConsultation(consultationData);
 
       if (result.success) {
         toast.success('Consulta registrada exitosamente');
         
-        // Recargar datos
         await Promise.all([
           refreshTransactions(),
           refreshExpenses(),
           refreshClinicRecords()
         ]);
 
-        // Limpiar formulario
         setSelectedSpecialties([]);
         setSelectedDoctors([]);
         setPatientName('');
@@ -290,9 +404,9 @@ export default function RegisterConsultation() {
       } else {
         toast.error('Error al registrar la consulta');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al registrar consulta:', error);
-      toast.error('Error al registrar la consulta');
+      toast.error(error.message || 'Error al registrar la consulta');
     } finally {
       setLoading(false);
       setIsSubmitting(false);
@@ -303,10 +417,10 @@ export default function RegisterConsultation() {
     const commissionGroups: { [key: string]: { doctorName: string; percentage: number; amount: number; serviceName: string }[] } = {};
 
     services.forEach(service => {
-      const serviceName = availableServices.find(s => s.id === service.serviceId)?.name || 'Servicio';
+      const serviceName = service.serviceName || 'Servicio';
       service.commissions.forEach(comm => {
         const doctor = doctors.find(d => d.id === comm.doctorId);
-        if (doctor && comm.percentage > 0) {
+        if (doctor && comm.amount > 0) {
           if (!commissionGroups[doctor.name]) {
             commissionGroups[doctor.name] = [];
           }
@@ -326,7 +440,7 @@ export default function RegisterConsultation() {
         <div className="ml-4 space-y-1">
           {commissions.map((comm, index) => (
             <div key={index} className="text-xs text-muted-foreground">
-              {comm.serviceName}: {comm.percentage}% = Bs. {comm.amount.toFixed(2)}
+              {comm.serviceName}: {comm.percentage.toFixed(1)}% = Bs. {comm.amount.toFixed(2)}
             </div>
           ))}
           <div className="text-xs font-semibold">
@@ -337,7 +451,7 @@ export default function RegisterConsultation() {
     ));
   };
 
-  const hasCommissions = services.some(s => s.commissions.some(comm => comm.percentage > 0));
+  const hasCommissions = services.some(s => s.commissions.some(comm => comm.amount > 0));
 
   return (
     <div className="p-6 space-y-6">
@@ -424,14 +538,15 @@ export default function RegisterConsultation() {
 
               {services.map((service, serviceIndex) => {
                 const selectedService = availableServices.find(s => s.id === service.serviceId);
+                const serviceSubtotal = calculateServiceSubtotal(service);
                 const serviceCommissionsTotal = getServiceCommissionsTotal(service);
                 const serviceNetTotal = getServiceNetTotal(service);
+                const totalServiceCommissionPercentage = getTotalCommissionPercentage(service);
                 
                 return (
                   <div key={serviceIndex} className="p-4 border rounded-lg bg-muted/30 space-y-4">
-                    {/* Fila principal del servicio */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
-                      {/* Servicio - Ocupa 3 columnas */}
+                      {/* Servicio */}
                       <div className="lg:col-span-3 space-y-2">
                         <Label className="text-sm">Servicio</Label>
                         <Select 
@@ -452,9 +567,9 @@ export default function RegisterConsultation() {
                         </Select>
                       </div>
 
-                      {/* Precio - Ocupa 2 columnas */}
+                      {/* Precio */}
                       <div className="lg:col-span-2 space-y-2">
-                        <Label className="text-sm">Precio (Bs.)</Label>
+                        <Label className="text-sm">Precio Unitario (Bs.)</Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -467,9 +582,42 @@ export default function RegisterConsultation() {
                         />
                       </div>
 
-                      {/* Comisiones - Ocupa 4 columnas */}
+                      {/* Cantidad */}
+                      <div className="lg:col-span-2 space-y-2">
+                        <Label className="text-sm">Cantidad</Label>
+                        <Input
+                          type="number"
+                          step="1"
+                          min="1"
+                          value={service.quantity || ''}
+                          onChange={(e) => {
+                            if (e.target.value === '') {
+                              updateService(serviceIndex, 'quantity', '');
+                            } else {
+                              updateService(serviceIndex, 'quantity', parseFloat(e.target.value) || 1);
+                            }
+                          }}
+                          placeholder="1"
+                          onWheel={(e) => e.currentTarget.blur()}
+                          className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          disabled={isSubmitting}
+                        />
+                      </div>
+
+                      {/* Comisiones - IDÉNTICO A QUOTATIONSFORM */}
                       <div className="lg:col-span-4 space-y-2">
-                        <Label className="text-sm">Comisiones</Label>
+                        <div className="flex justify-between items-center">
+                          <Label className="text-sm">Comisiones</Label>
+                          {service.serviceId && (
+                            <span className={`text-xs ${
+                              serviceCommissionsTotal > serviceSubtotal
+                                ? 'text-red-600 font-bold' 
+                                : 'text-muted-foreground'
+                            }`}>
+                              Total: {totalServiceCommissionPercentage.toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           {service.commissions.map((commission) => {
                             const doctor = doctors.find(d => d.id === commission.doctorId);
@@ -480,23 +628,47 @@ export default function RegisterConsultation() {
                                 <span className="text-xs font-medium whitespace-nowrap">
                                   {doctor.name}
                                 </span>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  max="100"
-                                  value={commission.percentage || ''}
-                                  onChange={(e) => updateCommissionPercentage(
-                                    serviceIndex, 
-                                    commission.doctorId, 
-                                    parseFloat(e.target.value) || 0
-                                  )}
-                                  placeholder="%"
-                                  onWheel={(e) => e.currentTarget.blur()}
-                                  className="w-12 h-6 text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                  disabled={isSubmitting}
-                                />
-                                <span className="text-xs text-muted-foreground whitespace-nowrap">%</span>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleCommissionType(serviceIndex, commission.doctorId)}
+                                  className="text-xs px-1 py-0.5 bg-blue-100 rounded hover:bg-blue-200"
+                                  title={commission.commissionType === 'percentage' ? 'Cambiar a monto fijo' : 'Cambiar a porcentaje'}
+                                >
+                                  {commission.commissionType === 'percentage' ? '%' : 'Bs'}
+                                </button>
+                                {commission.commissionType === 'percentage' ? (
+                                  <>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max="100"
+                                      value={commission.percentage || ''}
+                                      onChange={(e) => updateCommission(serviceIndex, commission.doctorId, parseFloat(e.target.value) || 0, 'percentage')}
+                                      placeholder="%"
+                                      onWheel={(e) => e.currentTarget.blur()}
+                                      className="w-12 h-6 text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      disabled={isSubmitting}
+                                    />
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">%</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max={serviceSubtotal}
+                                      value={commission.amount || ''}
+                                      onChange={(e) => updateCommission(serviceIndex, commission.doctorId, parseFloat(e.target.value) || 0, 'amount')}
+                                      placeholder="Bs"
+                                      onWheel={(e) => e.currentTarget.blur()}
+                                      className="w-16 h-6 text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      disabled={isSubmitting}
+                                    />
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">Bs</span>
+                                  </>
+                                )}
                                 <span className="text-xs font-semibold text-green-600 whitespace-nowrap ml-1">
                                   Bs. {commission.amount.toFixed(2)}
                                 </span>
@@ -505,23 +677,18 @@ export default function RegisterConsultation() {
                           })}
                           {service.commissions.length === 0 && (
                             <span className="text-xs text-muted-foreground italic">
-                              No hay comisiones
+                              No hay comisiones para este servicio
                             </span>
                           )}
                         </div>
+                        {serviceCommissionsTotal > serviceSubtotal && (
+                          <p className="text-xs text-red-600 font-medium">
+                            ⚠️ Las comisiones no pueden superar el total del servicio
+                          </p>
+                        )}
                       </div>
 
-                      {/* Total Neto - Ocupa 2 columnas */}
-                      <div className="lg:col-span-2 space-y-2">
-                        <Label className="text-sm">Total Neto (Bs.)</Label>
-                        <div className="flex items-center gap-2 p-2 border rounded-md bg-green-50">
-                          <span className="text-sm font-semibold text-green-700 flex-1 text-center">
-                            Bs. {serviceNetTotal.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Botón eliminar - Ocupa 1 columna */}
+                      {/* Eliminar */}
                       <div className="lg:col-span-1 flex justify-end">
                         <Button 
                           type="button" 
@@ -535,6 +702,24 @@ export default function RegisterConsultation() {
                         </Button>
                       </div>
                     </div>
+
+                    {/* Resumen del servicio */}
+                    {service.serviceId && (
+                      <div className="grid grid-cols-3 gap-4 text-sm border-t pt-3">
+                        <div>
+                          <span className="font-medium">Subtotal: </span>
+                          <span>Bs. {service.price.toFixed(2)} x {service.quantity} = Bs. {serviceSubtotal.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="font-medium">Comisiones: </span>
+                          <span className="text-red-600">Bs. {serviceCommissionsTotal.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="font-medium">Neto: </span>
+                          <span className="text-green-600">Bs. {serviceNetTotal.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -544,7 +729,19 @@ export default function RegisterConsultation() {
               <Label>Método de Pago</Label>
               <Select 
                 value={paymentMethod} 
-                onValueChange={(value: 'QR' | 'Efectivo' | 'Mixto') => setPaymentMethod(value)}
+                onValueChange={(value: 'QR' | 'Efectivo' | 'Mixto') => {
+                  setPaymentMethod(value);
+                  if (value === 'Efectivo') {
+                    setCashAmount(total);
+                    setQrAmount(0);
+                  } else if (value === 'QR') {
+                    setCashAmount(0);
+                    setQrAmount(total);
+                  } else {
+                    setCashAmount(Math.floor(total / 2));
+                    setQrAmount(Math.ceil(total / 2));
+                  }
+                }}
                 disabled={isSubmitting}
               >
                 <SelectTrigger>

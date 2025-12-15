@@ -15,6 +15,7 @@ interface SelectedService {
   specialtyId: string;
   specialtyName: string;
   price: number;
+  quantity: number;
   commissions: ServiceCommission[];
 }
 
@@ -22,6 +23,7 @@ interface ServiceCommission {
   doctorId: string;
   percentage: number;
   amount: number;
+  commissionType: 'percentage' | 'amount';
 }
 
 interface QuotationsFormProps {
@@ -63,17 +65,19 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
         )));
       setSelectedDoctors(doctorsFromData);
       
-      // Cargar servicios
+      // Cargar servicios CON CANTIDAD
       setSelectedServices(quotationData.services.map((service: any) => ({
         serviceId: service.serviceId,
         serviceName: service.serviceName,
         specialtyId: service.specialtyId,
         specialtyName: service.specialtyName,
         price: Number(service.price) || 0,
+        quantity: Number(service.quantity) || 1,
         commissions: service.commissions.map((comm: any) => ({
           doctorId: comm.doctorId,
           percentage: Number(comm.percentage) || 0,
-          amount: Number(comm.amount) || 0
+          amount: Number(comm.amount) || 0,
+          commissionType: comm.commissionType || 'percentage'
         }))
       })));
     } else {
@@ -87,21 +91,28 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
     }
   }, [quotationData, editingId]);
 
-  // Calculate total from selected services (solo enteros)
-  const total = Math.round(selectedServices.reduce((sum, service) => sum + (Number(service.price) || 0), 0));
+  // Calculate subtotal for a service (price * quantity)
+  const calculateServiceSubtotal = (service: SelectedService) => {
+    return Math.round(service.price * service.quantity);
+  };
 
-  // Calculate total commissions per doctor (solo enteros)
+  // Calculate total from selected services
+  const total = Math.round(selectedServices.reduce((sum, service) => sum + calculateServiceSubtotal(service), 0));
+
+  // Calculate total commissions per doctor
   const doctorCommissions = selectedServices.reduce((acc, service) => {
+    const serviceSubtotal = calculateServiceSubtotal(service);
     service.commissions.forEach(commission => {
       if (!acc[commission.doctorId]) {
         acc[commission.doctorId] = 0;
       }
+      // Sumar el monto total de la comisión (ya calculado correctamente)
       acc[commission.doctorId] += Math.round(commission.amount);
     });
     return acc;
   }, {} as { [key: string]: number });
 
-  // Calculate total commissions (solo enteros)
+  // Calculate total commissions
   const totalCommissions = Math.round(Object.values(doctorCommissions).reduce((sum, amount) => sum + amount, 0));
   const totalNet = total - totalCommissions;
 
@@ -185,7 +196,7 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
                   ...service,
                   commissions: [
                     ...service.commissions,
-                    { doctorId, percentage: 0, amount: 0 }
+                    { doctorId, percentage: 0, amount: 0, commissionType: 'percentage' }
                   ]
                 };
               }
@@ -207,12 +218,13 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
       specialtyId: '',
       specialtyName: '',
       price: 0,
+      quantity: 1,
       commissions: selectedDoctors
         .filter(doctorId => {
           const doctor = doctors.find(d => d.id === doctorId);
           return doctor?.paymentType === 'comision';
         })
-        .map(doctorId => ({ doctorId, percentage: 0, amount: 0 }))
+        .map(doctorId => ({ doctorId, percentage: 0, amount: 0, commissionType: 'percentage' }))
     };
     setSelectedServices([...selectedServices, newService]);
   };
@@ -225,7 +237,7 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
   };
 
   // Update service
-  const updateService = (index: number, field: 'serviceId' | 'price', value: string | number) => {
+  const updateService = (index: number, field: 'serviceId' | 'price' | 'quantity', value: string | number) => {
     if (isSubmitting) return;
     
     const newServices = [...selectedServices];
@@ -238,55 +250,150 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
           specialtyId: service.specialtyId,
           specialtyName: service.specialtyName,
           price: service.price || 0,
+          quantity: newServices[index].quantity || 1,
           commissions: selectedDoctors
             .filter(doctorId => {
               const doctor = doctors.find(d => d.id === doctorId);
               return doctor?.paymentType === 'comision' && 
                      (doctor.specialtyIds || []).includes(service.specialtyId);
             })
-            .map(doctorId => ({ doctorId, percentage: 0, amount: 0 }))
+            .map(doctorId => ({ doctorId, percentage: 0, amount: 0, commissionType: 'percentage' }))
         };
       }
-    } else {
+    } else if (field === 'price') {
       // Solo permitir enteros en el precio
       const intValue = Math.round(Number(value) || 0);
       newServices[index].price = intValue;
       // Recalculate commissions when price changes
-      newServices[index].commissions = newServices[index].commissions.map(comm => ({
-        ...comm,
-        amount: Math.round((intValue * comm.percentage) / 100)
-      }));
+      newServices[index].commissions = newServices[index].commissions.map(comm => {
+        const serviceSubtotal = calculateServiceSubtotal(newServices[index]);
+        if (comm.commissionType === 'percentage') {
+          const amount = Math.round((serviceSubtotal * comm.percentage) / 100);
+          return { ...comm, amount };
+        } else {
+          // For fixed amount, recalculate based on quantity
+          const amountPerUnit = Math.round(comm.amount / newServices[index].quantity);
+          const newTotalAmount = Math.round(amountPerUnit * newServices[index].quantity);
+          return { ...comm, amount: newTotalAmount };
+        }
+      });
+    } else if (field === 'quantity') {
+      // Permitir borrar el valor usando string vacío temporalmente
+      if (value === '') {
+        newServices[index].quantity = '' as any; // Permitir string vacío temporalmente
+      } else {
+        const intValue = Math.round(Number(value) || 1);
+        if (intValue < 1) {
+          toast.error('La cantidad no puede ser menor a 1');
+          return;
+        }
+        newServices[index].quantity = intValue;
+        // Recalculate commissions when quantity changes
+        newServices[index].commissions = newServices[index].commissions.map(comm => {
+          const serviceSubtotal = calculateServiceSubtotal(newServices[index]);
+          if (comm.commissionType === 'percentage') {
+            const amount = Math.round((serviceSubtotal * comm.percentage) / 100);
+            return { ...comm, amount };
+          } else {
+            // For fixed amount, keep amount per unit constant
+            const amountPerUnit = Math.round(comm.amount / (newServices[index].quantity || 1));
+            const newTotalAmount = Math.round(amountPerUnit * intValue);
+            return { ...comm, amount: newTotalAmount };
+          }
+        });
+      }
     }
     setSelectedServices(newServices);
   };
 
-  // Update commission percentage with validation
-  const updateCommissionPercentage = (serviceIndex: number, doctorId: string, percentage: number) => {
+  // Update commission with type (percentage or amount)
+  const updateCommission = (serviceIndex: number, doctorId: string, value: number, type: 'percentage' | 'amount') => {
     if (isSubmitting) return;
     
-    // Validar que no sea mayor a 100%
-    if (percentage > 100) {
-      toast.error('El porcentaje no puede ser mayor a 100%');
-      return;
-    }
-
     const newServices = [...selectedServices];
     const service = newServices[serviceIndex];
     const commissionIndex = service.commissions.findIndex(comm => comm.doctorId === doctorId);
     
     if (commissionIndex !== -1) {
-      newServices[serviceIndex].commissions[commissionIndex] = {
-        doctorId,
-        percentage,
-        amount: Math.round((service.price * percentage) / 100)
-      };
+      const serviceSubtotal = calculateServiceSubtotal(service);
+      
+      if (type === 'percentage') {
+        // Validar que no sea mayor a 100%
+        if (value > 100) {
+          toast.error('El porcentaje no puede ser mayor a 100%');
+          return;
+        }
+        const amount = Math.round((serviceSubtotal * value) / 100);
+        newServices[serviceIndex].commissions[commissionIndex] = {
+          doctorId,
+          percentage: value,
+          amount,
+          commissionType: 'percentage'
+        };
+      } else {
+        // For fixed amount, ensure it doesn't exceed service subtotal
+        const maxAmount = serviceSubtotal;
+        if (value > maxAmount) {
+          toast.error(`El monto no puede exceder Bs. ${maxAmount}`);
+          return;
+        }
+        // Calculate equivalent percentage for display
+        const percentage = serviceSubtotal > 0 ? Math.round((value / serviceSubtotal) * 100) : 0;
+        newServices[serviceIndex].commissions[commissionIndex] = {
+          doctorId,
+          percentage,
+          amount: Math.round(value),
+          commissionType: 'amount'
+        };
+      }
+      
+      setSelectedServices(newServices);
+    }
+  };
+
+  // Toggle commission type
+  const toggleCommissionType = (serviceIndex: number, doctorId: string) => {
+    if (isSubmitting) return;
+    
+    const newServices = [...selectedServices];
+    const service = newServices[serviceIndex];
+    const commissionIndex = service.commissions.findIndex(comm => comm.doctorId === doctorId);
+    
+    if (commissionIndex !== -1) {
+      const commission = service.commissions[commissionIndex];
+      const newType = commission.commissionType === 'percentage' ? 'amount' : 'percentage';
+      
+      // When switching types, keep the same amount but recalculate percentage
+      const serviceSubtotal = calculateServiceSubtotal(service);
+      
+      if (newType === 'amount') {
+        // Switching to amount - keep current amount, calculate percentage
+        const percentage = serviceSubtotal > 0 ? Math.round((commission.amount / serviceSubtotal) * 100) : 0;
+        newServices[serviceIndex].commissions[commissionIndex] = {
+          ...commission,
+          commissionType: newType,
+          percentage
+        };
+      } else {
+        // Switching to percentage - calculate new amount based on current percentage
+        const amount = Math.round((serviceSubtotal * commission.percentage) / 100);
+        newServices[serviceIndex].commissions[commissionIndex] = {
+          ...commission,
+          commissionType: newType,
+          amount
+        };
+      }
+      
       setSelectedServices(newServices);
     }
   };
 
   // Calculate total percentage for a service
   const getTotalCommissionPercentage = (service: SelectedService) => {
-    return service.commissions.reduce((sum, comm) => sum + comm.percentage, 0);
+    const serviceSubtotal = calculateServiceSubtotal(service);
+    if (serviceSubtotal === 0) return 0;
+    const totalCommissionAmount = service.commissions.reduce((sum, comm) => sum + comm.amount, 0);
+    return Math.round((totalCommissionAmount / serviceSubtotal) * 100);
   };
 
   // Handle form submit
@@ -303,13 +410,26 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
       return;
     }
 
-    // Validar que ningún servicio tenga más de 100% en comisiones
-    const hasInvalidCommissions = selectedServices.some(service => 
-      getTotalCommissionPercentage(service) > 100
+    // Validar que todos los servicios tengan cantidad válida
+    const hasInvalidQuantity = selectedServices.some(service => 
+      service.quantity < 1 || !Number.isInteger(service.quantity)
     );
 
+    if (hasInvalidQuantity) {
+      toast.error('Por favor ingrese una cantidad válida para todos los servicios (mínimo 1)');
+      return;
+    }
+
+    // Validar que ningún servicio tenga más de 100% en comisiones
+    const hasInvalidCommissions = selectedServices.some(service => {
+      const serviceSubtotal = calculateServiceSubtotal(service);
+      if (serviceSubtotal === 0) return false;
+      const totalCommissionAmount = service.commissions.reduce((sum, comm) => sum + comm.amount, 0);
+      return totalCommissionAmount > serviceSubtotal;
+    });
+
     if (hasInvalidCommissions) {
-      toast.error('La suma de las comisiones no puede superar el 100% por servicio');
+      toast.error('Las comisiones no pueden superar el total del servicio');
       return;
     }
 
@@ -447,8 +567,9 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
           </div>
           
           {selectedServices.map((service, serviceIndex) => {
-            const totalServiceCommissionPercentage = getTotalCommissionPercentage(service);
+            const serviceSubtotal = calculateServiceSubtotal(service);
             const totalServiceCommissionAmount = service.commissions.reduce((sum, comm) => sum + comm.amount, 0);
+            const totalServiceCommissionPercentage = getTotalCommissionPercentage(service);
             
             return (
               <div key={serviceIndex} className="p-4 border rounded-lg bg-muted/30 space-y-4">
@@ -476,7 +597,7 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
 
                   {/* Precio */}
                   <div className="lg:col-span-2 space-y-2">
-                    <Label className="text-sm">Precio (Bs.)</Label>
+                    <Label className="text-sm">Precio Unitario (Bs.)</Label>
                     <Input
                       type="number"
                       step="1"
@@ -490,13 +611,36 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
                     />
                   </div>
 
+                  {/* Cantidad - CORREGIDO PARA PERMITIR BORRAR */}
+                  <div className="lg:col-span-2 space-y-2">
+                    <Label className="text-sm">Cantidad</Label>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="1"
+                      value={service.quantity || ''}
+                      onChange={(e) => {
+                        // Permitir borrar el valor
+                        if (e.target.value === '') {
+                          updateService(serviceIndex, 'quantity', '');
+                        } else {
+                          updateService(serviceIndex, 'quantity', parseFloat(e.target.value) || 1);
+                        }
+                      }}
+                      placeholder="1"
+                      onWheel={(e) => e.currentTarget.blur()}
+                      className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
                   {/* Comisiones */}
-                  <div className="lg:col-span-6 space-y-2">
+                  <div className="lg:col-span-4 space-y-2">
                     <div className="flex justify-between items-center">
                       <Label className="text-sm">Comisiones</Label>
                       {service.serviceId && (
                         <span className={`text-xs ${
-                          totalServiceCommissionPercentage > 100 
+                          totalServiceCommissionAmount > serviceSubtotal
                             ? 'text-red-600 font-bold' 
                             : 'text-muted-foreground'
                         }`}>
@@ -514,19 +658,47 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
                             <span className="text-xs font-medium whitespace-nowrap">
                               {doctor.name}
                             </span>
-                            <Input
-                              type="number"
-                              step="1"
-                              min="0"
-                              max="100"
-                              value={commission.percentage || ''}
-                              onChange={(e) => updateCommissionPercentage(serviceIndex, commission.doctorId, parseFloat(e.target.value) || 0)}
-                              placeholder="%"
-                              onWheel={(e) => e.currentTarget.blur()}
-                              className="w-12 h-6 text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                              disabled={isSubmitting}
-                            />
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">%</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleCommissionType(serviceIndex, commission.doctorId)}
+                              className="text-xs px-1 py-0.5 bg-blue-100 rounded hover:bg-blue-200"
+                              title={commission.commissionType === 'percentage' ? 'Cambiar a monto fijo' : 'Cambiar a porcentaje'}
+                            >
+                              {commission.commissionType === 'percentage' ? '%' : 'Bs'}
+                            </button>
+                            {commission.commissionType === 'percentage' ? (
+                              <>
+                                <Input
+                                  type="number"
+                                  step="1"
+                                  min="0"
+                                  max="100"
+                                  value={commission.percentage || ''}
+                                  onChange={(e) => updateCommission(serviceIndex, commission.doctorId, parseFloat(e.target.value) || 0, 'percentage')}
+                                  placeholder="%"
+                                  onWheel={(e) => e.currentTarget.blur()}
+                                  className="w-12 h-6 text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  disabled={isSubmitting}
+                                />
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">%</span>
+                              </>
+                            ) : (
+                              <>
+                                <Input
+                                  type="number"
+                                  step="1"
+                                  min="0"
+                                  max={serviceSubtotal}
+                                  value={commission.amount || ''}
+                                  onChange={(e) => updateCommission(serviceIndex, commission.doctorId, parseFloat(e.target.value) || 0, 'amount')}
+                                  placeholder="Bs"
+                                  onWheel={(e) => e.currentTarget.blur()}
+                                  className="w-16 h-6 text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  disabled={isSubmitting}
+                                />
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">Bs</span>
+                              </>
+                            )}
                             <span className="text-xs font-semibold text-green-600 whitespace-nowrap ml-1">
                               Bs. {commission.amount}
                             </span>
@@ -539,9 +711,9 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
                         </span>
                       )}
                     </div>
-                    {totalServiceCommissionPercentage > 100 && (
+                    {totalServiceCommissionAmount > serviceSubtotal && (
                       <p className="text-xs text-red-600 font-medium">
-                        ⚠️ La suma de las comisiones no puede superar el 100%
+                        ⚠️ Las comisiones no pueden superar el total del servicio
                       </p>
                     )}
                   </div>
@@ -565,16 +737,16 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
                 {service.serviceId && (
                   <div className="grid grid-cols-3 gap-4 text-sm border-t pt-3">
                     <div>
+                      <span className="font-medium">Subtotal: </span>
+                      <span>Bs. {service.price} x {service.quantity} = Bs. {serviceSubtotal}</span>
+                    </div>
+                    <div>
                       <span className="font-medium">Comisiones servicio: </span>
                       <span className="text-red-600">Bs. {totalServiceCommissionAmount}</span>
                     </div>
                     <div>
                       <span className="font-medium">Total Neto servicio: </span>
-                      <span className="text-green-600">Bs. {(service.price - totalServiceCommissionAmount)}</span>
-                    </div>
-                    <div>
-                      <span className="font-medium">Total servicio: </span>
-                      <span>Bs. {service.price}</span>
+                      <span className="text-green-600">Bs. {(serviceSubtotal - totalServiceCommissionAmount)}</span>
                     </div>
                   </div>
                 )}

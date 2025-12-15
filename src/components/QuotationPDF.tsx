@@ -108,8 +108,22 @@ const styles = StyleSheet.create({
     borderRightColor: '#ffffff',
     borderRightStyle: 'solid',
   },
+  tableColSmall: {
+    flex: 0.7,
+    padding: 10,
+    borderRightWidth: 1,
+    borderRightColor: '#ffffff',
+    borderRightStyle: 'solid',
+  },
   tableCol: {
     flex: 1,
+    padding: 10,
+    borderRightWidth: 1,
+    borderRightColor: '#e5e5e5',
+    borderRightStyle: 'solid',
+  },
+  tableColSmallContent: {
+    flex: 0.7,
     padding: 10,
     borderRightWidth: 1,
     borderRightColor: '#e5e5e5',
@@ -118,12 +132,12 @@ const styles = StyleSheet.create({
   tableCellHeader: {
     fontSize: 10,
     fontWeight: 'bold',
-    textAlign: 'left',
+    textAlign: 'center',
     color: '#ffffff',
   },
   tableCell: {
     fontSize: 9,
-    textAlign: 'left',
+    textAlign: 'center',
     color: '#262626',
   },
   totalBox: {
@@ -155,25 +169,6 @@ const styles = StyleSheet.create({
     borderTopStyle: 'solid',
     paddingTop: 12,
   },
-  compactTableRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
-    borderBottomStyle: 'solid',
-    minHeight: 28,
-  },
-  compactTableCol: {
-    flex: 1,
-    padding: 8,
-    borderRightWidth: 1,
-    borderRightColor: '#e5e5e5',
-    borderRightStyle: 'solid',
-  },
-  compactTableCell: {
-    fontSize: 8,
-    textAlign: 'left',
-    color: '#262626',
-  },
 });
 
 interface QuotationPDFProps {
@@ -183,8 +178,12 @@ interface QuotationPDFProps {
 
 // Componente PDF
 const QuotationPDF = ({ quotation, doctors }: QuotationPDFProps) => {
-  // Calcular si necesitamos usar diseño compacto basado en la cantidad de servicios
-  const needsCompactLayout = quotation.services.length > 8;
+  // Calcular el total para verificación
+  const calculatedTotal = quotation.services.reduce((total: number, service: any) => {
+    const quantity = Number(service.quantity) || 1;
+    const price = Number(service.price) || 0;
+    return total + (price * quantity);
+  }, 0);
   
   return (
     <Document>
@@ -193,7 +192,7 @@ const QuotationPDF = ({ quotation, doctors }: QuotationPDFProps) => {
         <View style={styles.header}>
           <Image 
             style={styles.logo}
-            src={logoImage} // Usando la importación directa
+            src={logoImage}
           />
           <View style={styles.headerText}>
             <Text style={styles.title}>COTIZACIÓN</Text>
@@ -203,7 +202,6 @@ const QuotationPDF = ({ quotation, doctors }: QuotationPDFProps) => {
           </View>
         </View>
 
-        {/* Resto del componente igual... */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Información del Cliente</Text>
           <View style={styles.clientInfo}>
@@ -225,35 +223,53 @@ const QuotationPDF = ({ quotation, doctors }: QuotationPDFProps) => {
               <View style={styles.tableColHeader}>
                 <Text style={styles.tableCellHeader}>Servicio</Text>
               </View>
+              <View style={styles.tableColSmall}>
+                <Text style={styles.tableCellHeader}>Cant.</Text>
+              </View>
               <View style={styles.tableColHeader}>
-                <Text style={styles.tableCellHeader}>Precio (Bs.)</Text>
+                <Text style={styles.tableCellHeader}>Precio Unit. (Bs.)</Text>
+              </View>
+              <View style={styles.tableColHeader}>
+                <Text style={styles.tableCellHeader}>Total (Bs.)</Text>
               </View>
             </View>
 
-            {quotation.services.map((service: any, index: number) => (
-              <View 
-                style={needsCompactLayout ? styles.compactTableRow : styles.tableRow} 
-                key={index}
-              >
-                <View style={needsCompactLayout ? styles.compactTableCol : styles.tableCol}>
-                  <Text style={needsCompactLayout ? styles.compactTableCell : styles.tableCell}>
-                    {service.serviceName}
-                  </Text>
+            {quotation.services.map((service: any, index: number) => {
+              const quantity = Number(service.quantity) || 1;
+              const totalService = Math.round(Number(service.price) * quantity);
+              
+              return (
+                <View style={styles.tableRow} key={index}>
+                  <View style={styles.tableCol}>
+                    <Text style={styles.tableCell}>
+                      {service.serviceName}
+                    </Text>
+                  </View>
+                  <View style={styles.tableColSmallContent}>
+                    <Text style={styles.tableCell}>
+                      {quantity}
+                    </Text>
+                  </View>
+                  <View style={styles.tableCol}>
+                    <Text style={styles.tableCell}>
+                      {Number(service.price).toFixed(2)}
+                    </Text>
+                  </View>
+                  <View style={styles.tableCol}>
+                    <Text style={styles.tableCell}>
+                      {totalService.toFixed(2)}
+                    </Text>
+                  </View>
                 </View>
-                <View style={needsCompactLayout ? styles.compactTableCol : styles.tableCol}>
-                  <Text style={needsCompactLayout ? styles.compactTableCell : styles.tableCell}>
-                    {Number(service.price).toFixed(2)}
-                  </Text>
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </View>
 
         <View style={styles.totalBox}>
-          <Text style={styles.totalTitle}>Total</Text>
+          <Text style={styles.totalTitle}>TOTAL</Text>
           <Text style={styles.totalAmount}>
-            Bs. {Number(quotation.total).toFixed(2)}
+            Bs. {calculatedTotal.toFixed(2)}
           </Text>
         </View>
 
@@ -272,7 +288,7 @@ export const generateQuotationPDF = async (quotation: any, doctors: any[]) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `cotizacion-${quotation.clientName}-${new Date(quotation.date).toISOString().split('T')[0]}.pdf`;
+    link.download = `cotizacion-${quotation.clientName.replace(/\s+/g, '-')}-${new Date(quotation.date).toISOString().split('T')[0]}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
