@@ -11,13 +11,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { Plus, CalendarIcon, FilterX, Edit, Trash2, DollarSign, ChevronDown, ChevronUp, Search, Eye } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { getDoctors, createExpense, updateExpense, deleteExpense, payExpense, payCommissionGroup, getBoxBalances, ExpenseRequest, PaymentRequest, CommissionPaymentRequest } from '@/api/ExpensesApi';
+import { getDoctors, createExpense, updateExpense, deleteExpense, payExpense, payCommissionGroup, ExpenseRequest, PaymentRequest, CommissionPaymentRequest } from '@/api/ExpensesApi';
 
 const clinicExpenseTypes = ['Salarios', 'Pago Laboratorios', 'Pago Comisión Doctores', 'Compra de Insumos', 'Compra de Materiales de Limpieza', 'Alquiler', 'Compra Material de Escritorio', 'Internet', 'Luz', 'Celulares', 'Otros Gastos Clínica'];
 const batasExpenseTypes = ['Envíos', 'Compra de Telas', 'Costura', 'Otros Gastos Batas'];
@@ -46,15 +47,8 @@ interface Doctor {
   nombre: string;
 }
 
-interface BoxBalances {
-  clinic: number;
-  clinicQr: number;
-  batas: number;
-  batasQr: number;
-}
-
 export default function Expenses() {
-  const { expenses, addExpense, updateExpense: updateExpenseContext, deleteExpense: deleteExpenseContext, refreshExpenses, refreshTransactions } = useApp();
+  const { expenses, addExpense, updateExpense: updateExpenseContext, deleteExpense: deleteExpenseContext, transactions, refreshExpenses, refreshTransactions } = useApp();
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [payDialogOpen, setPayDialogOpen] = useState(false);
@@ -80,42 +74,23 @@ export default function Expenses() {
   const [paymentData, setPaymentData] = useState<PaymentFormData>({ clinicAmount: '', clinicQrAmount: '', batasAmount: '', batasQrAmount: '' });
   const [formData, setFormData] = useState<ExpenseFormData>({ type: '', doctor: '', description: '', amount: '', clinicAmount: '', clinicQrAmount: '', batasAmount: '', batasQrAmount: '', status: 'pending' });
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [boxBalances, setBoxBalances] = useState<BoxBalances>({ clinic: 0, clinicQr: 0, batas: 0, batasQr: 0 });
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastSubmission, setLastSubmission] = useState<{timestamp: number, data: any} | null>(null);
+  const [saveAsPending, setSaveAsPending] = useState(false);
 
-  // Función para formatear la fecha ISO a un formato legible sin cambiar la hora
-  const formatDateDisplay = (isoString: string) => {
-    // Extraer directamente del string ISO sin convertir zonas horarias
-    const date = new Date(isoString);
-    
-    // Usar los componentes UTC para mantener la hora original
-    const year = date.getUTCFullYear();
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(date.getUTCDate()).padStart(2, '0');
-    const hours = String(date.getUTCHours()).padStart(2, '0');
-    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-    
-    return `${day}/${month}/${year} ${hours}:${minutes}`;
-  };
-
-  // Cargar doctores y saldos de cajas al montar el componente
+  // Cargar doctores al montar el componente
   useEffect(() => {
-    const loadInitialData = async () => {
+    const loadDoctors = async () => {
       try {
-        const [doctorsData, balancesData] = await Promise.all([
-          getDoctors(),
-          getBoxBalances()
-        ]);
+        const doctorsData = await getDoctors();
         setDoctors(doctorsData);
-        setBoxBalances(balancesData);
       } catch (error) {
-        console.error('Error loading initial data:', error);
-        toast.error('Error al cargar los datos iniciales');
+        console.error('Error loading doctors:', error);
+        toast.error('Error al cargar los doctores');
       }
     };
-    loadInitialData();
+    loadDoctors();
   }, []);
 
   // Cargar gastos con filtros aplicados
@@ -131,21 +106,16 @@ export default function Expenses() {
     loadExpensesWithFilters();
   }, [dateFilter, specificDate, dateRange]);
 
-  // Actualizar saldos de cajas cuando se abra el diálogo de pago
-  useEffect(() => {
-    const loadBoxBalances = async () => {
-      if (payDialogOpen) {
-        try {
-          const balances = await getBoxBalances();
-          setBoxBalances(balances);
-        } catch (error) {
-          console.error('Error loading box balances:', error);
-          toast.error('Error al cargar los saldos de las cajas');
-        }
-      }
-    };
-    loadBoxBalances();
-  }, [payDialogOpen]);
+  const calculateBoxBalance = (boxType: string) => {
+    return transactions
+      .filter(t => t.type === boxType)
+      .reduce((sum, t) => sum + t.amount, 0);
+  };
+
+  const clinicBalance = calculateBoxBalance('clinic');
+  const clinicQrBalance = calculateBoxBalance('clinic-qr');
+  const batasBalance = calculateBoxBalance('batas');
+  const batasQrBalance = calculateBoxBalance('batas-qr');
 
   const getGroupedCommissions = () => {
     const commissionExpenses = expenses.filter(expense => 
@@ -262,7 +232,7 @@ export default function Expenses() {
         categoria: selectedCategory,
         monto: amount,
         iddoctor: iddoctor,
-        estado: editExpense?.status || 'pending'
+        estado: saveAsPending ? 'pending' : 'completed'
       };
 
       // Verificar duplicado antes de enviar
@@ -284,16 +254,52 @@ export default function Expenses() {
         const updatedExpense = await updateExpense(editExpense.id, expenseRequest);
         updateExpenseContext(updatedExpense);
         toast.success('Gasto actualizado exitosamente');
+        setOpen(false); 
+        setEditExpense(null); 
+        resetForm();
       } else {
         // Crear nuevo gasto
         const newExpense = await createExpense(expenseRequest);
         addExpense(newExpense);
-        toast.success('Gasto registrado exitosamente');
+        
+        if (saveAsPending) {
+          toast.success('Gasto registrado como pendiente');
+          setOpen(false); 
+          resetForm();
+        } else {
+          // Si no es pendiente, abrir diálogo de pago
+          toast.success('Gasto registrado. Proceda al pago');
+          setOpen(false);
+          
+          // Preparar datos para el pago
+          setExpenseToPay({
+            id: newExpense.id,
+            type: newExpense.type,
+            doctor: newExpense.doctor,
+            description: newExpense.description,
+            amount: newExpense.amount,
+            category: newExpense.category,
+            clinicAmount: 0,
+            clinicQrAmount: 0,
+            batasAmount: 0,
+            batasQrAmount: 0,
+            status: 'pending',
+            createdDate: newExpense.createdDate,
+            date: newExpense.date
+          });
+          
+          // Inicializar datos de pago según categoría
+          setPaymentData({ 
+            clinicAmount: newExpense.category === 'clinic' ? newExpense.amount.toString() : '', 
+            clinicQrAmount: '', 
+            batasAmount: newExpense.category === 'batas' ? newExpense.amount.toString() : '', 
+            batasQrAmount: '' 
+          });
+          
+          setPayDialogOpen(true);
+          resetForm();
+        }
       }
-
-      setOpen(false); 
-      setEditExpense(null); 
-      resetForm();
     } catch (error: any) {
       console.error('Error saving expense:', error);
       
@@ -371,27 +377,27 @@ export default function Expenses() {
 
       // Validar saldos suficientes
       if (expenseToPay.category === 'clinic') {
-        if (clinicAmount > boxBalances.clinic) { 
-          toast.error(`No hay suficiente saldo en Caja Dental Studio. Saldo disponible: Bs. ${boxBalances.clinic.toFixed(2)}`); 
+        if (clinicAmount > clinicBalance) { 
+          toast.error(`No hay suficiente saldo en Caja Dental Studio. Saldo disponible: Bs. ${clinicBalance.toFixed(2)}`); 
           setLoading(false);
           setIsSubmitting(false);
           return; 
         }
-        if (clinicQrAmount > boxBalances.clinicQr) { 
-          toast.error(`No hay suficiente saldo en Caja Dental Studio QR. Saldo disponible: Bs. ${boxBalances.clinicQr.toFixed(2)}`); 
+        if (clinicQrAmount > clinicQrBalance) { 
+          toast.error(`No hay suficiente saldo en Caja Dental Studio QR. Saldo disponible: Bs. ${clinicQrBalance.toFixed(2)}`); 
           setLoading(false);
           setIsSubmitting(false);
           return; 
         }
       } else {
-        if (batasAmount > boxBalances.batas) { 
-          toast.error(`No hay suficiente saldo en Caja Dr.Dress. Saldo disponible: Bs. ${boxBalances.batas.toFixed(2)}`); 
+        if (batasAmount > batasBalance) { 
+          toast.error(`No hay suficiente saldo en Caja Dr.Dress. Saldo disponible: Bs. ${batasBalance.toFixed(2)}`); 
           setLoading(false);
           setIsSubmitting(false);
           return; 
         }
-        if (batasQrAmount > boxBalances.batasQr) { 
-          toast.error(`No hay suficiente saldo en Caja Dr.Dress QR. Saldo disponible: Bs. ${boxBalances.batasQr.toFixed(2)}`); 
+        if (batasQrAmount > batasQrBalance) { 
+          toast.error(`No hay suficiente saldo en Caja Dr.Dress QR. Saldo disponible: Bs. ${batasQrBalance.toFixed(2)}`); 
           setLoading(false);
           setIsSubmitting(false);
           return; 
@@ -435,12 +441,8 @@ export default function Expenses() {
         toast.success('Gasto pagado completamente');
       }
 
-      // Recargar datos y saldos
-      await Promise.all([
-        refreshExpenses(), 
-        refreshTransactions(),
-        getBoxBalances().then(setBoxBalances)
-      ]);
+      // Recargar datos
+      await Promise.all([refreshExpenses(), refreshTransactions()]);
       
     } catch (error: any) {
       console.error('Error processing payment:', error);
@@ -466,9 +468,9 @@ export default function Expenses() {
   const handlePaySingleCommission = (commission: any) => { 
     setExpenseToPay(commission); 
     setPaymentData({ 
-      clinicAmount: '', 
+      clinicAmount: commission.category === 'clinic' ? commission.amount.toString() : '', 
       clinicQrAmount: '', 
-      batasAmount: '', 
+      batasAmount: commission.category === 'batas' ? commission.amount.toString() : '', 
       batasQrAmount: '' 
     }); 
     setPayDialogOpen(true); 
@@ -491,13 +493,14 @@ export default function Expenses() {
       date: new Date().toISOString(), 
       isCommissionGroup: true 
     }); 
-    setPaymentData({ clinicAmount: '', clinicQrAmount: '', batasAmount: '', batasQrAmount: '' }); 
+    setPaymentData({ clinicAmount: totalAmount.toString(), clinicQrAmount: '', batasAmount: '', batasQrAmount: '' }); 
     setPayDialogOpen(true); 
   };
 
   const resetForm = () => { 
     setFormData({ type: '', doctor: '', description: '', amount: '', clinicAmount: '', clinicQrAmount: '', batasAmount: '', batasQrAmount: '', status: 'pending' }); 
     setSelectedCategory('clinic'); 
+    setSaveAsPending(false);
   };
 
   const handleEdit = (expense: any) => { 
@@ -520,9 +523,9 @@ export default function Expenses() {
   const handlePay = (expense: any) => { 
     setExpenseToPay(expense); 
     setPaymentData({ 
-      clinicAmount: '', 
+      clinicAmount: expense.category === 'clinic' ? expense.amount.toString() : '', 
       clinicQrAmount: '', 
-      batasAmount: '', 
+      batasAmount: expense.category === 'batas' ? expense.amount.toString() : '', 
       batasQrAmount: '' 
     }); 
     setPayDialogOpen(true); 
@@ -659,7 +662,8 @@ export default function Expenses() {
   const renderExpenseRow = (expense: any, isCompleted = false) => (
     <TableRow key={expense.id}>
       <TableCell className="py-2">
-        <div className="text-sm">{formatDateDisplay(expense.createdDate || expense.date)}</div>
+        <div className="text-sm">{format(new Date(expense.createdDate || expense.date), 'dd/MM/yyyy')}</div>
+        <div className="text-xs text-muted-foreground">{format(new Date(expense.createdDate || expense.date), 'HH:mm')}</div>
       </TableCell>
       <TableCell className="py-2">
         <Badge variant="outline" className="text-xs">
@@ -706,7 +710,7 @@ export default function Expenses() {
             <h3 className="font-medium text-sm truncate" title={expense.type}>{expense.type}</h3>
             <div className="mt-1">
               <span className="text-xs text-muted-foreground">
-                {formatDateDisplay(expense.createdDate || expense.date)}
+                {format(new Date(expense.createdDate || expense.date), 'dd/MM/yy')}
               </span>
             </div>
           </div>
@@ -725,7 +729,7 @@ export default function Expenses() {
         <div className="grid grid-cols-2 gap-3 text-xs mt-2">
           <div>
             <span className="text-muted-foreground">Fecha completa:</span>
-            <p className="font-medium">{formatDateDisplay(expense.createdDate || expense.date)}</p>
+            <p className="font-medium">{format(new Date(expense.createdDate || expense.date), 'dd/MM/yyyy HH:mm')}</p>
           </div>
           <div>
             <span className="text-muted-foreground">Categoría:</span>
@@ -850,12 +854,28 @@ export default function Expenses() {
                   </p>
                 )}
               </div>
+              
+              {/* Checkbox para guardar como pendiente (solo para nuevos gastos) */}
+              {!editExpense && (
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="saveAsPending" 
+                    checked={saveAsPending}
+                    onCheckedChange={(checked) => setSaveAsPending(checked as boolean)}
+                    disabled={isButtonDisabled}
+                  />
+                  <Label htmlFor="saveAsPending" className="text-sm cursor-pointer">
+                    Guardar como pendiente (para pagar después)
+                  </Label>
+                </div>
+              )}
+              
               <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-3 sm:pt-4">
                 <Button type="button" variant="outline" onClick={() => setOpen(false)} className="w-full sm:w-auto text-sm sm:text-base" disabled={isButtonDisabled}>
                   Cancelar
                 </Button>
                 <Button type="submit" className="w-full sm:w-auto text-sm sm:text-base" disabled={isFormDisabled}>
-                  {isButtonDisabled ? 'Procesando...' : (editExpense ? 'Actualizar Gasto' : 'Registrar Gasto')}
+                  {isButtonDisabled ? 'Procesando...' : (editExpense ? 'Actualizar Gasto' : (saveAsPending ? 'Guardar como Pendiente' : 'Registrar y Pagar'))}
                 </Button>
               </DialogFooter>
             </form>
@@ -963,7 +983,7 @@ export default function Expenses() {
                                   {data.expenses.map((expense) => (
                                     <TableRow key={expense.id}>
                                       <TableCell className="py-2 text-xs">
-                                        {formatDateDisplay(expense.createdDate || expense.date)}
+                                        {format(new Date(expense.createdDate || expense.date), 'dd/MM/yyyy')}
                                       </TableCell>
                                       <TableCell className="py-2 text-xs font-medium">Bs. {expense.amount.toFixed(2)}</TableCell>
                                       <TableCell className="py-2">{getStatusBadge(expense)}</TableCell>
@@ -1020,7 +1040,7 @@ export default function Expenses() {
                         {data.expenses.map((expense) => (
                           <div key={expense.id} className="flex justify-between items-center border rounded p-2">
                             <div>
-                              <div className="text-xs">{formatDateDisplay(expense.createdDate || expense.date)}</div>
+                              <div className="text-xs">{format(new Date(expense.createdDate || expense.date), 'dd/MM/yyyy')}</div>
                               <div className="text-sm font-medium">Bs. {expense.amount.toFixed(2)}</div>
                               {getStatusBadge(expense)}
                             </div>
@@ -1189,7 +1209,7 @@ export default function Expenses() {
                     <h3 className="font-medium text-sm truncate" title={expense.type}>{expense.type}</h3>
                     <div className="mt-1">
                       <span className="text-xs text-muted-foreground">
-                        {formatDateDisplay(expense.createdDate || expense.date)}
+                        {format(new Date(expense.createdDate || expense.date), 'dd/MM/yy')}
                       </span>
                     </div>
                   </div>
@@ -1234,7 +1254,7 @@ export default function Expenses() {
                 {expenseToPay?.category === 'clinic' ? (
                   <>
                     <div className="space-y-2">
-                      <Label className="text-xs sm:text-sm">Caja Dental Studio (Saldo: Bs. {boxBalances.clinic.toFixed(2)})</Label>
+                      <Label className="text-xs sm:text-sm">Caja Dental Studio (Saldo: Bs. {clinicBalance.toFixed(2)})</Label>
                       <Input 
                         type="number" 
                         step="0.01" 
@@ -1246,7 +1266,7 @@ export default function Expenses() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-xs sm:text-sm">Caja Dental Studio QR (Saldo: Bs. {boxBalances.clinicQr.toFixed(2)})</Label>
+                      <Label className="text-xs sm:text-sm">Caja Dental Studio QR (Saldo: Bs. {clinicQrBalance.toFixed(2)})</Label>
                       <Input 
                         type="number" 
                         step="0.01" 
@@ -1261,7 +1281,7 @@ export default function Expenses() {
                 ) : (
                   <>
                     <div className="space-y-2">
-                      <Label className="text-xs sm:text-sm">Caja Dr.Dress (Saldo: Bs. {boxBalances.batas.toFixed(2)})</Label>
+                      <Label className="text-xs sm:text-sm">Caja Dr.Dress (Saldo: Bs. {batasBalance.toFixed(2)})</Label>
                       <Input 
                         type="number" 
                         step="0.01" 
@@ -1273,7 +1293,7 @@ export default function Expenses() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-xs sm:text-sm">Caja Dr.Dress QR (Saldo: Bs. {boxBalances.batasQr.toFixed(2)})</Label>
+                      <Label className="text-xs sm:text-sm">Caja Dr.Dress QR (Saldo: Bs. {batasQrBalance.toFixed(2)})</Label>
                       <Input 
                         type="number" 
                         step="0.01" 
@@ -1312,7 +1332,7 @@ export default function Expenses() {
             <div className="bg-muted p-3 rounded-lg">
               <p className="text-sm sm:text-base"><strong>Doctor:</strong> {commissionToEdit?.doctor}</p>
               <p className="text-sm sm:text-base">
-                <strong>Fecha:</strong> {commissionToEdit ? formatDateDisplay(commissionToEdit.createdDate || commissionToEdit.date) : ''}
+                <strong>Fecha:</strong> {commissionToEdit ? format(new Date(commissionToEdit.createdDate || commissionToEdit.date), 'dd/MM/yyyy') : ''}
               </p>
             </div>
             <div className="space-y-2">
