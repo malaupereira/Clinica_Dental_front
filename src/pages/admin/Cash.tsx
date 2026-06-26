@@ -13,6 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { getCashBoxes, getAllMovementsWithExpenses, getCashSummary, CashBox, Movement, Expense } from '@/api/CashApi';
+import { useAuth } from '@/contexts/AppContext';
 
 interface CashSummary {
   balance: number;
@@ -39,6 +40,9 @@ interface DateFilterParams {
 
 export default function Cash() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAssistant = user?.tipo === 'assistant';
+  
   const [cashBoxes, setCashBoxes] = useState<CashBox[]>([]);
   const [selectedCashBoxId, setSelectedCashBoxId] = useState<string>('1');
   const [dateFilter, setDateFilter] = useState<'specific' | 'range' | 'today' | 'yesterday' | 'thisWeek' | 'currentMonth'>('today');
@@ -146,7 +150,20 @@ export default function Cash() {
   const loadCashBoxes = async () => {
     try {
       const boxes = await getCashBoxes();
-      setCashBoxes(boxes);
+      
+      // Si es asistente, filtrar las cajas QR (id 3 y 4)
+      if (isAssistant) {
+        const filteredBoxes = boxes.filter(box => box.idcaja !== 3 && box.idcaja !== 4);
+        setCashBoxes(filteredBoxes);
+        // Si la caja seleccionada actualmente es QR, cambiarla a la primera disponible
+        if (parseInt(selectedCashBoxId) === 3 || parseInt(selectedCashBoxId) === 4) {
+          if (filteredBoxes.length > 0) {
+            setSelectedCashBoxId(filteredBoxes[0].idcaja.toString());
+          }
+        }
+      } else {
+        setCashBoxes(boxes);
+      }
     } catch (error) {
       console.error('Error loading cash boxes:', error);
       toast({
