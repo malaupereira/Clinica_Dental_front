@@ -172,8 +172,8 @@ export function AppSidebar() {
               {adminItems
                 .filter(item => {
                   if (!isAdmin) {
-                    // Ayudante solo ve Registrar Movimiento
-                    return item.url === '/admin/register-movement';
+                    // Ayudante solo ve Registro y Registrar Movimiento
+                    return item.url === '/admin/records' || item.url === '/admin/register-movement';
                   }
                   return true;
                 })
