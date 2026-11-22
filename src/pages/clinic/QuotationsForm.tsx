@@ -29,7 +29,7 @@ interface ServiceCommission {
 interface QuotationsFormProps {
   editingId: string | null;
   quotationData?: any;
-  onSubmit: (quotation: any) => void;
+  onSubmit: (quotation: any) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -51,7 +51,7 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
       console.log('Loading quotation data:', quotationData);
       setClientName(quotationData.clientName || '');
       setPhone(quotationData.phone || '');
-      setDate(quotationData.date || new Date().toISOString().split('T')[0]);
+      setDate(quotationData.date || new Date().toLocaleDateString('en-CA'));
       
       // Cargar especialidades seleccionadas
       const specialtiesFromData = quotationData.selectedSpecialties || 
@@ -84,7 +84,7 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
       // Reset for new quotation - fecha automática de hoy
       setClientName('');
       setPhone('');
-      setDate(new Date().toISOString().split('T')[0]);
+      setDate(new Date().toLocaleDateString('en-CA'));
       setSelectedSpecialties([]);
       setSelectedDoctors([]);
       setSelectedServices([]);
@@ -93,11 +93,11 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
 
   // Calculate subtotal for a service (price * quantity)
   const calculateServiceSubtotal = (service: SelectedService) => {
-    return Math.round(service.price * service.quantity);
+    return Math.round(service.price * service.quantity * 100) / 100;
   };
 
   // Calculate total from selected services
-  const total = Math.round(selectedServices.reduce((sum, service) => sum + calculateServiceSubtotal(service), 0));
+  const total = Math.round(selectedServices.reduce((sum, service) => sum + calculateServiceSubtotal(service), 0) * 100) / 100;
 
   // Calculate total commissions per doctor
   const doctorCommissions = selectedServices.reduce((acc, service) => {
@@ -107,13 +107,13 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
         acc[commission.doctorId] = 0;
       }
       // Sumar el monto total de la comisión (ya calculado correctamente)
-      acc[commission.doctorId] += Math.round(commission.amount);
+      acc[commission.doctorId] += Math.round(commission.amount * 100) / 100;
     });
     return acc;
   }, {} as { [key: string]: number });
 
   // Calculate total commissions
-  const totalCommissions = Math.round(Object.values(doctorCommissions).reduce((sum, amount) => sum + amount, 0));
+  const totalCommissions = Math.round(Object.values(doctorCommissions).reduce((sum, amount) => sum + amount, 0) * 100) / 100;
   const totalNet = total - totalCommissions;
 
   // Calculate paid amount from existing payments
@@ -262,13 +262,13 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
       }
     } else if (field === 'price') {
       // Solo permitir enteros en el precio
-      const intValue = Math.round(Number(value) || 0);
+      const intValue = Number(value) || 0;
       newServices[index].price = intValue;
       // Recalculate commissions when price changes
       newServices[index].commissions = newServices[index].commissions.map(comm => {
         const serviceSubtotal = calculateServiceSubtotal(newServices[index]);
         if (comm.commissionType === 'percentage') {
-          const amount = Math.round((serviceSubtotal * comm.percentage) / 100);
+          const amount = Math.round(serviceSubtotal * comm.percentage) / 100;
           return { ...comm, amount };
         } else {
           // For fixed amount, recalculate based on quantity
@@ -292,7 +292,7 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
         newServices[index].commissions = newServices[index].commissions.map(comm => {
           const serviceSubtotal = calculateServiceSubtotal(newServices[index]);
           if (comm.commissionType === 'percentage') {
-            const amount = Math.round((serviceSubtotal * comm.percentage) / 100);
+            const amount = Math.round(serviceSubtotal * comm.percentage) / 100;
             return { ...comm, amount };
           } else {
             // For fixed amount, keep amount per unit constant
@@ -323,7 +323,7 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
           toast.error('El porcentaje no puede ser mayor a 100%');
           return;
         }
-        const amount = Math.round((serviceSubtotal * value) / 100);
+        const amount = Math.round(serviceSubtotal * value) / 100;
         newServices[serviceIndex].commissions[commissionIndex] = {
           doctorId,
           percentage: value,
@@ -342,7 +342,7 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
         newServices[serviceIndex].commissions[commissionIndex] = {
           doctorId,
           percentage,
-          amount: Math.round(value),
+          amount: Math.round(value * 100) / 100,
           commissionType: 'amount'
         };
       }
@@ -397,7 +397,7 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
   };
 
   // Handle form submit
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (isSubmitting) {
@@ -407,6 +407,16 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
 
     if (!clientName.trim() || !phone.trim() || selectedServices.length === 0) {
       toast.error('Por favor complete todos los campos requeridos');
+      return;
+    }
+
+    if (selectedServices.some(service => !service.serviceId || !Number.isFinite(service.price) || service.price < 0)) {
+      toast.error('Seleccione un servicio válido y complete los precios');
+      return;
+    }
+
+    if (editingId && quotationData && Number(quotationData.pendingAmount) < Number(quotationData.total)) {
+      toast.error('No se puede editar una cotización con abonos registrados');
       return;
     }
 
@@ -453,8 +463,11 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
       totalNet
     };
 
-    onSubmit(quotation);
-    setIsSubmitting(false);
+    try {
+      await onSubmit(quotation);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -600,7 +613,7 @@ export default function QuotationsForm({ editingId, quotationData, onSubmit, onC
                     <Label className="text-sm">Precio Unitario (Bs.)</Label>
                     <Input
                       type="number"
-                      step="1"
+                      step="0.01"
                       min="0"
                       value={service.price || ''}
                       onChange={(e) => updateService(serviceIndex, 'price', parseFloat(e.target.value) || 0)}

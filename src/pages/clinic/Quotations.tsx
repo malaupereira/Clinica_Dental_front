@@ -1,6 +1,6 @@
 // src/pages/admin/Quotations.tsx
 import { useState, useEffect } from 'react';
-import { useApp } from '@/contexts/AppContext';
+import { useApp, useAuth } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,6 +15,7 @@ import QuotationsForm from './QuotationsForm';
 import { generateQuotationPDF } from '@/components/QuotationPDF'; // Importar la función del PDF
 
 export default function Quotations() {
+  const { user } = useAuth();
   const { quotations, addQuotation, updateQuotation, deleteQuotation, registerQuotationPayment, doctors, refreshQuotations } = useApp();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
@@ -49,18 +50,19 @@ export default function Quotations() {
     setIsSubmitting(true);
     try {
       if (editingId) {
-        await updateQuotation(editingId, quotation);
+        await updateQuotation(editingId, { ...quotation, userId: user?.idUsuario });
         toast.success('Cotización actualizada');
       } else {
-        await addQuotation(quotation);
+        await addQuotation({ ...quotation, userId: user?.idUsuario });
         toast.success('Cotización creada');
       }
       resetForm();
       setIsDialogOpen(false);
-      await refreshQuotations(); // Refresh the list
+      try { await refreshQuotations(); }
+      catch (error) { console.error('Error actualizando lista:', error); toast.warning('Cotización guardada, pero no se pudo actualizar la lista'); }
     } catch (error) {
       console.error('Error saving quotation:', error);
-      toast.error('Error al guardar la cotización');
+      toast.error(error instanceof Error ? error.message : 'Error al guardar la cotización');
     } finally {
       setIsSubmitting(false);
     }
@@ -122,16 +124,13 @@ export default function Quotations() {
   // Calculate paid commissions per doctor
   const getPaidCommissionsPerDoctor = (quotation: any) => {
     const paidCommissions: { [key: string]: number } = {};
-    
-    quotation.payments?.forEach((payment: any) => {
-      Object.keys(payment.doctorCommissions || {}).forEach(doctorId => {
-        if (!paidCommissions[doctorId]) {
-          paidCommissions[doctorId] = 0;
-        }
-        paidCommissions[doctorId] += Number(payment.doctorCommissions[doctorId]) || 0;
+    quotation.services.forEach((service: any) => {
+      service.commissions.forEach((commission: any) => {
+        const id = String(commission.doctorId);
+        const paid = Math.max(0, Number(commission.amount) - Number(commission.pendingAmount));
+        paidCommissions[id] = (paidCommissions[id] || 0) + paid;
       });
     });
-    
     return paidCommissions;
   };
 
@@ -174,8 +173,8 @@ export default function Quotations() {
         newPayment.qrAmount = prev.amount;
       } else {
         // Mixto - dividir automáticamente
-        newPayment.cashAmount = Math.floor(prev.amount / 2);
-        newPayment.qrAmount = Math.ceil(prev.amount / 2);
+        newPayment.cashAmount = Math.round(prev.amount * 50) / 100;
+        newPayment.qrAmount = Math.round((prev.amount - newPayment.cashAmount) * 100) / 100;
       }
       
       return newPayment;
@@ -214,7 +213,7 @@ export default function Quotations() {
       
       Object.keys(pendingCommissions).forEach(doctorId => {
         const percentage = getDoctorCommissionPercentage(selectedQuotation, doctorId);
-        const suggestedAmount = Math.round((Number(currentPayment.amount) * percentage) / 100);
+        const suggestedAmount = Math.round((Number(currentPayment.amount) * percentage)) / 100;
         const maxAmount = Number(pendingCommissions[doctorId]) || 0;
         
         // Use suggested amount but don't exceed pending amount
@@ -294,7 +293,7 @@ export default function Quotations() {
         doctorCommissions: currentPayment.doctorCommissions
       };
       
-      const updatedQuotation = await registerQuotationPayment(paymentData);
+      const updatedQuotation = await registerQuotationPayment({ ...paymentData, userId: user?.idUsuario });
       
       // Verificar si la cotización se completó
       if (updatedQuotation.status === 'completado') {
@@ -305,10 +304,11 @@ export default function Quotations() {
       
       setIsPaymentDialogOpen(false);
       setSelectedQuotation(null);
-      await refreshQuotations(); // Refresh the list
+      try { await refreshQuotations(); }
+      catch (error) { console.error('Error actualizando lista:', error); toast.warning('Pago registrado, pero no se pudo actualizar la lista'); }
     } catch (error) {
       console.error('Error processing payment:', error);
-      toast.error('Error al registrar el pago');
+      toast.error(error instanceof Error ? error.message : 'Error al registrar el pago');
     } finally {
       setIsSubmitting(false);
     }
@@ -329,10 +329,11 @@ export default function Quotations() {
       toast.success('Cotización eliminada');
       setIsDeleteDialogOpen(false);
       setSelectedQuotation(null);
-      await refreshQuotations(); // Refresh the list
+      try { await refreshQuotations(); }
+      catch (error) { console.error('Error actualizando lista:', error); toast.warning('Cotización eliminada, pero no se pudo actualizar la lista'); }
     } catch (error) {
       console.error('Error deleting quotation:', error);
-      toast.error('Error al eliminar la cotización');
+      toast.error(error instanceof Error ? error.message : 'Error al eliminar la cotización');
     } finally {
       setIsSubmitting(false);
     }
@@ -340,8 +341,7 @@ export default function Quotations() {
 
   // Calculate pending amount
   const getPendingAmount = (quotation: any) => {
-    const totalPaid = quotation.payments?.reduce((sum: number, payment: any) => sum + (Number(payment.amount) || 0), 0) || 0;
-    return Math.max(0, Number(quotation.total) - totalPaid);
+    return Math.max(0, Number(quotation.pendingAmount ?? quotation.total));
   };
 
   // Calculate total commissions
@@ -771,7 +771,7 @@ export default function Quotations() {
       </Dialog>
 
       {/* Diálogo de Pago - MEJORADO PARA PANTALLAS PEQUEÑAS */}
-      <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+      <Dialog open={isPaymentDialogOpen} onOpenChange={value => { if (!isSubmitting) setIsPaymentDialogOpen(value); }}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader className="sticky top-0 bg-background z-10 pb-4 border-b">
             <DialogTitle>Registrar Pago</DialogTitle>
@@ -830,9 +830,9 @@ export default function Quotations() {
                       ...prev,
                       amount: newAmount,
                       cashAmount: prev.paymentMethod === 'Efectivo' ? newAmount : 
-                                 prev.paymentMethod === 'QR' ? 0 : Math.floor(newAmount / 2),
+                                 prev.paymentMethod === 'QR' ? 0 : Math.round(newAmount * 50) / 100,
                       qrAmount: prev.paymentMethod === 'QR' ? newAmount : 
-                                prev.paymentMethod === 'Efectivo' ? 0 : Math.ceil(newAmount / 2)
+                                prev.paymentMethod === 'Efectivo' ? 0 : Math.round(newAmount * 50) / 100
                     }));
                   }}
                   placeholder="0.00"

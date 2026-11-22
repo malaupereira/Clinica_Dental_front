@@ -155,8 +155,7 @@ export const getQuotations = async (): Promise<Quotation[]> => {
           return quotationWithCommissions;
         } catch (error) {
           console.error(`Error loading details for quotation ${quotation.idcotizacion}:`, error);
-          // Retornar cotización básica sin servicios si hay error
-          return mapBackendQuotation(quotation, [], []);
+          throw error;
         }
       })
     );
@@ -190,14 +189,10 @@ export const createQuotation = async (quotation: QuotationRequest): Promise<Quot
     console.log("Creating quotation:", quotation);
     const response = await api.post<BackendQuotation>("/quotations/quotations", quotation);
     const newQuotation = response.data;
-    
-    // Obtener servicios y pagos (vacíos para nueva cotización)
-    const services = await getQuotationServices(newQuotation.idcotizacion);
-    
-    return mapBackendQuotation(newQuotation, services, []);
+    return mapBackendQuotation(newQuotation, [], []);
   } catch (error) {
     console.error("Error creating quotation:", error);
-    throw new Error("No se pudo crear la cotización");
+    throw new Error(axios.isAxiosError(error) ? error.response?.data?.error || "No se pudo crear la cotización" : "No se pudo crear la cotización");
   }
 };
 
@@ -206,14 +201,12 @@ export const updateQuotation = async (id: string, quotation: QuotationRequest): 
     const response = await api.put<BackendQuotation>(`/quotations/quotations/${id}`, quotation);
     const updatedQuotation = response.data;
     
-    const services = await getQuotationServices(updatedQuotation.idcotizacion);
-    const payments = await getQuotationPayments(updatedQuotation.idcotizacion);
-    const mappedQuotation = mapBackendQuotation(updatedQuotation, services, payments);
-    
-    return await loadServiceCommissions(mappedQuotation);
+    // La actualización ya se confirmó en la base de datos.
+    // No convertir una falla de recarga en un falso error de guardado.
+    return mapBackendQuotation(updatedQuotation, [], []);
   } catch (error) {
     console.error("Error updating quotation:", error);
-    throw new Error("No se pudo actualizar la cotización");
+    throw new Error(axios.isAxiosError(error) ? error.response?.data?.error || "No se pudo actualizar la cotización" : "No se pudo actualizar la cotización");
   }
 };
 
@@ -222,7 +215,7 @@ export const deleteQuotation = async (id: string): Promise<void> => {
     await api.patch(`/quotations/quotations/${id}/status`, { status: 'eliminado' });
   } catch (error) {
     console.error("Error deleting quotation:", error);
-    throw new Error("No se pudo eliminar la cotización");
+    throw new Error(axios.isAxiosError(error) ? error.response?.data?.error || "No se pudo eliminar la cotización" : "No se pudo eliminar la cotización");
   }
 };
 
@@ -233,14 +226,12 @@ export const registerPayment = async (payment: PaymentRequest): Promise<Quotatio
     const updatedQuotation = response.data;
     console.log("Respuesta del backend después del pago:", updatedQuotation);
     
-    const services = await getQuotationServices(updatedQuotation.idcotizacion);
-    const payments = await getQuotationPayments(updatedQuotation.idcotizacion);
-    const mappedQuotation = mapBackendQuotation(updatedQuotation, services, payments);
-    
-    return await loadServiceCommissions(mappedQuotation);
+    // La actualización ya se confirmó en la base de datos.
+    // No convertir una falla de recarga en un falso error de guardado.
+    return mapBackendQuotation(updatedQuotation, [], []);
   } catch (error) {
     console.error("Error registering payment:", error);
-    throw new Error("No se pudo registrar el pago");
+    throw new Error(axios.isAxiosError(error) ? error.response?.data?.error || "No se pudo registrar el pago" : "No se pudo registrar el pago");
   }
 };
 
@@ -251,7 +242,7 @@ const getQuotationServices = async (quotationId: number): Promise<BackendQuotati
     return response.data;
   } catch (error) {
     console.error("Error fetching quotation services:", error);
-    return [];
+    throw error;
   }
 };
 
@@ -261,7 +252,7 @@ const getQuotationPayments = async (quotationId: number): Promise<BackendQuotati
     return response.data;
   } catch (error) {
     console.error("Error fetching quotation payments:", error);
-    return [];
+    throw error;
   }
 };
 
@@ -271,7 +262,7 @@ const getQuotationCommissions = async (serviceId: number): Promise<BackendQuotat
     return response.data;
   } catch (error) {
     console.error("Error fetching service commissions:", error);
-    return [];
+    throw error;
   }
 };
 
@@ -294,7 +285,7 @@ function mapBackendQuotation(
       id: service.idcotizacion_servicio.toString(),
       serviceId: service.idservicio.toString(),
       serviceName: service.nombre_servicio,
-      specialtyId: service.idespecialidad.toString(),
+      specialtyId: service.idespecialidad == null ? "" : service.idespecialidad.toString(),
       specialtyName: service.nombre_especialidad,
       price: parseFloat(service.precio),
       quantity: Number(service.cantidad) || 1, // <-- IMPORTANTE: Ahora usamos el campo cantidad de la BD
@@ -343,7 +334,7 @@ export const loadServiceCommissions = async (quotation: Quotation): Promise<Quot
           };
         } catch (error) {
           console.error(`Error loading commissions for service ${service.id}:`, error);
-          return service; // Retornar servicio sin comisiones si hay error
+          throw error;
         }
       })
     );
@@ -354,6 +345,6 @@ export const loadServiceCommissions = async (quotation: Quotation): Promise<Quot
     };
   } catch (error) {
     console.error("Error loading service commissions:", error);
-    return quotation; // Retornar cotización original si hay error
+    throw error;
   }
 };

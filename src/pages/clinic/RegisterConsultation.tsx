@@ -1,5 +1,5 @@
 // src/pages/admin/RegisterClinic.tsx
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
@@ -43,6 +43,7 @@ export default function RegisterConsultation() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const filteredDoctors = doctors.filter(d => 
     (d.specialtyIds || []).some(id => selectedSpecialties.includes(id))
@@ -150,7 +151,7 @@ export default function RegisterConsultation() {
       newServices[index].commissions = newServices[index].commissions.map(comm => {
         const serviceSubtotal = calculateServiceSubtotal(newServices[index]);
         if (comm.commissionType === 'percentage') {
-          const amount = (serviceSubtotal * comm.percentage) / 100;
+          const amount = Math.round(serviceSubtotal * comm.percentage) / 100;
           return { ...comm, amount };
         } else {
           return { ...comm, amount: comm.amount };
@@ -169,12 +170,10 @@ export default function RegisterConsultation() {
         newServices[index].commissions = newServices[index].commissions.map(comm => {
           const serviceSubtotal = calculateServiceSubtotal(newServices[index]);
           if (comm.commissionType === 'percentage') {
-            const amount = (serviceSubtotal * comm.percentage) / 100;
+            const amount = Math.round(serviceSubtotal * comm.percentage) / 100;
             return { ...comm, amount };
           } else {
-            const amountPerUnit = comm.amount / (newServices[index].quantity || 1);
-            const newTotalAmount = amountPerUnit * intValue;
-            return { ...comm, amount: newTotalAmount };
+            return { ...comm, amount: comm.amount };
           }
         });
       }
@@ -183,7 +182,7 @@ export default function RegisterConsultation() {
   };
 
   const calculateServiceSubtotal = (service: ServiceWithCommissions) => {
-    return Math.round(Number(service.price) * Number(service.quantity || 1));
+    return Math.round(Number(service.price) * Number(service.quantity) * 100) / 100;
   };
 
   const updateCommission = (serviceIndex: number, doctorId: string, value: number, type: 'percentage' | 'amount') => {
@@ -201,7 +200,7 @@ export default function RegisterConsultation() {
           toast.error('El porcentaje no puede ser mayor a 100%');
           return;
         }
-        const amount = (serviceSubtotal * value) / 100;
+        const amount = Math.round(serviceSubtotal * value) / 100;
         newServices[serviceIndex].commissions[commissionIndex] = {
           doctorId,
           percentage: value,
@@ -313,8 +312,31 @@ export default function RegisterConsultation() {
       return;
     }
 
-    if (paymentMethod === 'Mixto' && (cashAmount + qrAmount !== total)) {
+    if (paymentMethod === 'Mixto' && (Math.round((cashAmount + qrAmount) * 100) !== Math.round(total * 100) || cashAmount <= 0 || qrAmount <= 0)) {
       toast.error('La suma de efectivo y QR debe ser igual al total');
+      return;
+    }
+
+    if (!user?.idUsuario) {
+      toast.error('No se pudo identificar al usuario');
+      return;
+    }
+
+    if (services.some(service =>
+      !service.serviceId ||
+      !Number.isFinite(service.price) ||
+      service.price <= 0 ||
+      Math.abs(Math.round(service.price * 100) - service.price * 100) > 0.000001
+    ) || total <= 0) {
+      toast.error('Selecciona un servicio válido e ingresa un precio correcto');
+      return;
+    }
+
+    if (services.some(service => service.commissions.some(comm =>
+      !Number.isFinite(comm.amount) || comm.amount < 0 ||
+      !Number.isFinite(comm.percentage) || comm.percentage < 0 || comm.percentage > 100
+    ))) {
+      toast.error('Las comisiones deben tener montos y porcentajes válidos');
       return;
     }
 
@@ -333,11 +355,9 @@ export default function RegisterConsultation() {
   };
 
   const confirmSubmit = async () => {
-    if (isSubmitting) {
-      toast.error('La consulta ya está siendo procesada');
-      return;
-    }
-    
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setShowConfirmDialog(false);
     setIsSubmitting(true);
     setLoading(true);
     
@@ -386,12 +406,7 @@ export default function RegisterConsultation() {
 
       if (result.success) {
         toast.success('Consulta registrada exitosamente');
-        
-        await Promise.all([
-          refreshTransactions(),
-          refreshExpenses(),
-          refreshClinicRecords()
-        ]);
+
 
         setSelectedSpecialties([]);
         setSelectedDoctors([]);
@@ -401,6 +416,14 @@ export default function RegisterConsultation() {
         setCashAmount(0);
         setQrAmount(0);
         setShowConfirmDialog(false);
+        const refreshResults = await Promise.allSettled([
+          Promise.resolve().then(() => refreshTransactions()),
+          Promise.resolve().then(() => refreshExpenses()),
+          Promise.resolve().then(() => refreshClinicRecords())
+        ]);
+        if (refreshResults.some(result => result.status === 'rejected')) {
+          toast.error('La consulta se guardó, pero no se pudieron actualizar todos los listados. Recarga la página; no registres nuevamente.');
+        }
       } else {
         toast.error('Error al registrar la consulta');
       }
@@ -410,6 +433,7 @@ export default function RegisterConsultation() {
     } finally {
       setLoading(false);
       setIsSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
