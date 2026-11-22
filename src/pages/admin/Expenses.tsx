@@ -12,16 +12,15 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
-import { Plus, CalendarIcon, FilterX, Edit, Trash2, DollarSign, ChevronDown, ChevronUp, Search, Eye } from 'lucide-react';
+import { Plus, CalendarIcon, FilterX, Edit, Trash2, DollarSign, ChevronDown, ChevronUp, Search, Eye, Clock3, CheckCircle2, ReceiptText } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Checkbox } from '@/components/ui/checkbox';
 import { getDoctors, createExpense, updateExpense, deleteExpense, payExpense, payCommissionGroup, getBoxBalances, ExpenseRequest, PaymentRequest, CommissionPaymentRequest } from '@/api/ExpensesApi';
 
-const clinicExpenseTypes = ['Salarios', 'Pago Laboratorios', 'Pago Comisión Doctores', 'Compra de Insumos', 'Compra de Materiales de Limpieza', 'Alquiler', 'Compra Material de Escritorio', 'Internet', 'Luz', 'Celulares', 'Otros Gastos Clínica'];
-const batasExpenseTypes = ['Envíos', 'Compra de Telas', 'Costura', 'Otros Gastos Batas'];
+const clinicExpenseTypes = ['Salarios', 'Pago Laboratorios', 'Pago Comisión Doctores', 'Compra de Insumos', 'Compra de Materiales de Limpieza', 'Alquiler', 'Compra Material de Escritorio', 'Internet', 'Luz', 'Celulares', 'Contadora (impuestos)', 'Empresa de limpieza', 'Envíos moto', 'Otros Gastos Clínica'];
+const batasExpenseTypes = ['Envíos', 'Compra de Telas', 'Costura', 'Celular', 'Otros Gastos Batas'];
 
 interface ExpenseFormData { 
   type: string; 
@@ -65,7 +64,7 @@ export default function Expenses() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState<'clinic' | 'batas'>('clinic');
-  const [dateFilter, setDateFilter] = useState<'specific' | 'range' | 'currentMonth'>('currentMonth');
+  const [dateFilter, setDateFilter] = useState<'specific' | 'range' | 'currentMonth' | 'all'>('all');
   const [specificDate, setSpecificDate] = useState<Date>();
   const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ 
     from: startOfMonth(new Date()), 
@@ -75,6 +74,7 @@ export default function Expenses() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [expandedExpense, setExpandedExpense] = useState<string | null>(null);
+  const [expenseDetail, setExpenseDetail] = useState<any>(null);
   const [expandedCommission, setExpandedCommission] = useState<string | null>(null);
   const [editCommissionDialogOpen, setEditCommissionDialogOpen] = useState(false);
   const [commissionToEdit, setCommissionToEdit] = useState<any>(null);
@@ -182,7 +182,9 @@ export default function Expenses() {
     }
     
     if (dateFilter === 'range' && dateRange.from && dateRange.to) {
-      return itemDate >= dateRange.from && itemDate <= dateRange.to;
+      const lastDay = new Date(dateRange.to);
+      lastDay.setHours(23, 59, 59, 999);
+      return itemDate >= dateRange.from && itemDate <= lastDay;
     }
     
     return true;
@@ -246,12 +248,17 @@ export default function Expenses() {
         return; 
       }
 
+      if ((formData.type === 'Otros Gastos Clínica' || formData.type === 'Otros Gastos Batas') && !formData.description.trim()) {
+        toast.error('Ingresa la descripción del gasto');
+        return;
+      }
+
       // Encontrar el ID del doctor seleccionado
       const selectedDoctor = doctors.find(d => d.nombre === formData.doctor);
       const iddoctor = selectedDoctor ? selectedDoctor.iddoctor : undefined;
 
       // Si no es pendiente, validar que haya al menos un monto asignado
-      if (!formData.saveAsPending) {
+      if (!formData.saveAsPending && !editExpense) {
         const clinicAmount = Number(formData.clinicAmount) || 0;
         const clinicQrAmount = Number(formData.clinicQrAmount) || 0;
         const batasAmount = Number(formData.batasAmount) || 0;
@@ -328,6 +335,7 @@ export default function Expenses() {
 
       const expenseRequest: ExpenseRequest = {
         tipo: formData.type,
+        descripcion: formData.description.trim(),
         categoria: selectedCategory,
         monto: amount,
         iddoctor: iddoctor,
@@ -335,7 +343,7 @@ export default function Expenses() {
       };
 
       // Verificar duplicado antes de enviar
-      if (isDuplicateSubmission(expenseRequest)) {
+      if (!editExpense && isDuplicateSubmission(expenseRequest)) {
         toast.error('Este gasto ya fue registrado recientemente');
         setLoading(false);
         setIsSubmitting(false);
@@ -360,7 +368,7 @@ export default function Expenses() {
       }
 
       // Si no es pendiente, procesar el pago inmediatamente
-      if (!formData.saveAsPending) {
+      if (!formData.saveAsPending && !editExpense) {
         const clinicAmount = Number(formData.clinicAmount) || 0;
         const clinicQrAmount = Number(formData.clinicQrAmount) || 0;
         const batasAmount = Number(formData.batasAmount) || 0;
@@ -383,7 +391,7 @@ export default function Expenses() {
         
         toast.success('Gasto registrado y pagado exitosamente');
       } else {
-        toast.success('Gasto registrado como pendiente');
+        toast.success(editExpense ? 'Gasto actualizado correctamente' : 'Gasto registrado como pendiente');
       }
 
       setOpen(false); 
@@ -602,7 +610,7 @@ export default function Expenses() {
       batasAmount: expense.batasAmount?.toString() || '', 
       batasQrAmount: expense.batasQrAmount?.toString() || '', 
       status: expense.status || 'pending',
-      saveAsPending: expense.status === 'pending'
+      saveAsPending: true
     }); 
     setOpen(true); 
   };
@@ -711,7 +719,7 @@ export default function Expenses() {
   };
 
   const clearFilters = () => { 
-    setDateFilter('currentMonth');
+    setDateFilter('all');
     setSpecificDate(undefined); 
     setDateRange({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) }); 
     setTypeFilter('all'); 
@@ -719,7 +727,7 @@ export default function Expenses() {
     setSearchTerm(''); 
   };
 
-  const hasActiveFilters = dateFilter !== 'currentMonth' || specificDate || 
+  const hasActiveFilters = dateFilter !== 'all' || specificDate || 
     (dateRange.from && dateRange.to && (
       dateRange.from.getTime() !== startOfMonth(new Date()).getTime() || 
       dateRange.to.getTime() !== endOfMonth(new Date()).getTime()
@@ -728,7 +736,8 @@ export default function Expenses() {
 
   const currentExpenseTypes = selectedCategory === 'clinic' ? clinicExpenseTypes : batasExpenseTypes;
   const allExpenseTypes = [...clinicExpenseTypes, ...batasExpenseTypes];
-  const showDescriptionField = formData.type === 'Otros Gastos Clínica' || formData.type === 'Otros Gastos Batas';
+  const showDescriptionField = Boolean(formData.type);
+  const descriptionRequired = formData.type === 'Otros Gastos Clínica' || formData.type === 'Otros Gastos Batas';
   
   const getStatusBadge = (expense: any) => 
     expense.status === 'completed' ? 
@@ -752,6 +761,7 @@ export default function Expenses() {
       </TableCell>
       <TableCell className="py-2">
         <div className="font-medium text-sm">{expense.type}</div>
+        {expense.description && <div className="text-xs text-muted-foreground truncate max-w-[260px]" title={expense.description}>{expense.description}</div>}
       </TableCell>
       <TableCell className="py-2 text-sm">{expense.doctor || 'NA'}</TableCell>
       <TableCell className="py-2 font-bold text-destructive text-sm">Bs. {expense.amount.toFixed(2)}</TableCell>
@@ -768,9 +778,14 @@ export default function Expenses() {
               <Edit className="h-3 w-3" />
             </Button>
           )}
-          <Button size="sm" variant="outline" onClick={() => handleDelete(expense)} className="h-7 w-7 p-0 text-destructive" title="Eliminar gasto" disabled={isButtonDisabled}>
-            <Trash2 className="h-3 w-3" />
+          <Button type="button" size="sm" variant="outline" onClick={() => setExpenseDetail(expense)} className="h-8 px-2 text-xs gap-1" title="Ver detalle del gasto" aria-label="Ver detalle del gasto">
+            <Eye className="h-3 w-3" /> Ver detalle
           </Button>
+          {!isCompleted && (
+            <Button size="sm" variant="outline" onClick={() => handleDelete(expense)} className="h-7 w-7 p-0 text-destructive" title="Eliminar gasto" disabled={isButtonDisabled}>
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       </TableCell>
     </TableRow>
@@ -817,6 +832,9 @@ export default function Expenses() {
           </div>
         </div>
         <div className="flex gap-2 mt-3">
+          <Button size="sm" variant="outline" onClick={() => setExpenseDetail(expense)} className="flex-1 text-xs h-8">
+            <Eye className="h-3 w-3 mr-1" />Detalle
+          </Button>
           {!isCompleted && (
             <Button size="sm" variant="outline" onClick={() => handlePay(expense)} className="flex-1 text-xs h-8" disabled={isButtonDisabled}>
               <DollarSign className="h-3 w-3 mr-1" />Pagar
@@ -840,7 +858,7 @@ export default function Expenses() {
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 sm:gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Gastos</h1>
-          <p className="text-xs sm:text-sm md:text-base text-muted-foreground">Registre y gestione los gastos del negocio</p>
+          <p className="text-xs sm:text-sm md:text-base text-muted-foreground">Registra gastos, consulta su detalle y controla los pagos</p>
         </div>
         <Dialog open={open} onOpenChange={(open) => { 
           if (!isButtonDisabled) {
@@ -853,18 +871,25 @@ export default function Expenses() {
         }}>
           <DialogTrigger asChild>
             <Button className="w-full sm:w-auto text-sm sm:text-base" disabled={isButtonDisabled}>
-              <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />Nuevo Gasto
+              <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />Registrar gasto
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto mx-2 sm:mx-auto">
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl">{editExpense ? 'Editar Gasto' : 'Registrar Gasto'}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                Primero identifica el gasto y luego elige si quieres pagarlo ahora o dejarlo pendiente.
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-semibold text-sm">1. Información del gasto</h3>
+                <p className="text-xs text-muted-foreground">Selecciona el negocio y el concepto del gasto.</p>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-2">
                   <Label className="text-sm sm:text-base">Categoría *</Label>
-                  <Select value={selectedCategory} onValueChange={(value: 'clinic' | 'batas') => setSelectedCategory(value)} disabled={!!editExpense || isButtonDisabled}>
+                  <Select value={selectedCategory} onValueChange={(value: 'clinic' | 'batas') => { setSelectedCategory(value); setFormData(previous => ({ ...previous, type: '', doctor: '', description: '' })); }} disabled={!!editExpense || isButtonDisabled}>
                     <SelectTrigger className="text-sm sm:text-base">
                       <SelectValue />
                     </SelectTrigger>
@@ -905,15 +930,16 @@ export default function Expenses() {
               )}
               {showDescriptionField && (
                 <div className="space-y-2">
-                  <Label className="text-sm sm:text-base">Descripción *</Label>
+                  <Label className="text-sm sm:text-base">Descripción {descriptionRequired ? '*' : '(opcional)'}</Label>
                   <Input 
                     value={formData.description} 
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
-                    placeholder="Descripción del gasto" 
+                    placeholder="Ej.: Pago de factura, compra o motivo del gasto" 
                     className="text-sm sm:text-base" 
-                    required 
+                    required={descriptionRequired} 
                     disabled={isButtonDisabled}
                   />
+                  <p className="text-xs text-muted-foreground">Este detalle también se mostrará en el historial.</p>
                 </div>
               )}
               <div className="space-y-2">
@@ -935,10 +961,39 @@ export default function Expenses() {
                 )}
               </div>
 
+              <div className="space-y-3 border-t pt-4">
+                <div>
+                  <h3 className="font-semibold text-sm">2. ¿Cómo registrarás este gasto?</h3>
+                  <p className="text-xs text-muted-foreground">Elige una opción antes de guardar.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={!!editExpense || isButtonDisabled}
+                    aria-pressed={!formData.saveAsPending}
+                    onClick={() => setFormData(previous => ({ ...previous, saveAsPending: false }))}
+                    className={cn('flex items-start gap-3 rounded-lg border-2 p-3 text-left transition-colors disabled:opacity-60', !formData.saveAsPending ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50')}
+                  >
+                    <DollarSign className="h-5 w-5 shrink-0 mt-0.5" />
+                    <span><strong className="block text-sm">Pagar ahora</strong><span className="block text-xs text-muted-foreground mt-1">Se descontará el dinero de una caja.</span></span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!!editExpense || isButtonDisabled}
+                    aria-pressed={formData.saveAsPending}
+                    onClick={() => setFormData(previous => ({ ...previous, saveAsPending: true, clinicAmount: '', clinicQrAmount: '', batasAmount: '', batasQrAmount: '' }))}
+                    className={cn('flex items-start gap-3 rounded-lg border-2 p-3 text-left transition-colors disabled:opacity-60', formData.saveAsPending ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50')}
+                  >
+                    <Clock3 className="h-5 w-5 shrink-0 mt-0.5" />
+                    <span><strong className="block text-sm">Dejar pendiente</strong><span className="block text-xs text-muted-foreground mt-1">Podrás pagarlo después sin afectar la caja.</span></span>
+                  </button>
+                </div>
+              </div>
+
               {/* Sección de pago directo - solo si no está marcado como pendiente */}
               {!formData.saveAsPending && !editExpense && (
                 <div className="space-y-3 border-t pt-3">
-                  <Label className="text-sm sm:text-base font-semibold">Distribución del Pago</Label>
+                  <Label className="text-sm sm:text-base font-semibold">3. ¿De qué caja saldrá el dinero?</Label>
                   <div className="grid grid-cols-1 gap-3">
                     {selectedCategory === 'clinic' ? (
                       <>
@@ -996,31 +1051,13 @@ export default function Expenses() {
                       </>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Distribuya el pago entre las cajas disponibles. La suma debe ser igual al monto total.
-                  </p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/50 p-3 text-sm">
+                    <span>Asignado: <strong>Bs. {(Number(formData.clinicAmount || 0) + Number(formData.clinicQrAmount || 0) + Number(formData.batasAmount || 0) + Number(formData.batasQrAmount || 0)).toFixed(2)}</strong></span>
+                    <span>Falta asignar: <strong>Bs. {(Number(formData.amount || 0) - Number(formData.clinicAmount || 0) - Number(formData.clinicQrAmount || 0) - Number(formData.batasAmount || 0) - Number(formData.batasQrAmount || 0)).toFixed(2)}</strong></span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">La suma asignada debe coincidir con el monto total.</p>
                 </div>
               )}
-
-              {/* Checkbox para guardar como pendiente */}
-              <div className="flex items-center space-x-2 pt-2">
-                <Checkbox
-                  id="saveAsPending"
-                  checked={formData.saveAsPending}
-                  onCheckedChange={(checked) => {
-                    setFormData({ 
-                      ...formData, 
-                      saveAsPending: checked === true,
-                      // Limpiar montos de pago si se marca pendiente
-                      ...(checked === true && { clinicAmount: '', clinicQrAmount: '', batasAmount: '', batasQrAmount: '' })
-                    });
-                  }}
-                  disabled={!!editExpense || isButtonDisabled}
-                />
-                <Label htmlFor="saveAsPending" className="text-sm cursor-pointer">
-                  Guardar como pendiente (para pagar después)
-                </Label>
-              </div>
 
               <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-3 sm:pt-4">
                 <Button type="button" variant="outline" onClick={() => setOpen(false)} className="w-full sm:w-auto text-sm sm:text-base" disabled={isButtonDisabled}>
@@ -1035,12 +1072,35 @@ export default function Expenses() {
         </Dialog>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Card className="border-l-4 border-l-amber-500">
+          <CardContent className="p-4 flex gap-3 items-center">
+            <Clock3 className="h-6 w-6 text-amber-600 shrink-0" />
+            <div><p className="text-xs text-muted-foreground">Gastos pendientes</p><p className="text-xl font-semibold">Bs. {totalPendingExpenses.toFixed(2)}</p><p className="text-xs text-muted-foreground">{filteredPendingExpenses.length} registros con filtros</p></div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-emerald-500">
+          <CardContent className="p-4 flex gap-3 items-center">
+            <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0" />
+            <div><p className="text-xs text-muted-foreground">Gastos completados</p><p className="text-xl font-semibold">Bs. {totalCompletedExpenses.toFixed(2)}</p><p className="text-xs text-muted-foreground">{filteredCompletedExpenses.length} registros con filtros</p></div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-slate-400">
+          <CardContent className="p-4 flex gap-3 items-center">
+            <ReceiptText className="h-6 w-6 text-muted-foreground shrink-0" />
+            <div><p className="text-xs text-muted-foreground">Gastos encontrados</p><p className="text-xl font-semibold">{filteredPendingExpenses.length + filteredCompletedExpenses.length}</p><p className="text-xs text-muted-foreground">Según los filtros seleccionados</p></div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-3">
+        <div><h2 className="font-semibold">Buscar y filtrar gastos</h2><p className="text-xs text-muted-foreground">Puedes buscar por tipo, doctor o descripción.</p></div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <div className="lg:col-span-2">
           <div className="relative">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Buscar por tipo, doctor..." 
+              placeholder="Buscar gasto, descripción o doctor..." 
               value={searchTerm} 
               onChange={(e) => setSearchTerm(e.target.value)} 
               className="pl-8 text-sm" 
@@ -1073,6 +1133,8 @@ export default function Expenses() {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
       </div>
 
       {hasActiveFilters && (
@@ -1262,11 +1324,12 @@ export default function Expenses() {
               )}
             </CardTitle>
             <div className="flex flex-col sm:flex-row gap-2">
-              <Select value={dateFilter} onValueChange={(value: 'specific' | 'range' | 'currentMonth') => setDateFilter(value)} disabled={isButtonDisabled}>
+              <Select value={dateFilter} onValueChange={(value: 'specific' | 'range' | 'currentMonth' | 'all') => setDateFilter(value)} disabled={isButtonDisabled}>
                 <SelectTrigger className="text-sm w-full sm:w-[140px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">Todos los meses</SelectItem>
                   <SelectItem value="currentMonth">Mes actual</SelectItem>
                   <SelectItem value="specific">Día específico</SelectItem>
                   <SelectItem value="range">Rango de fechas</SelectItem>
@@ -1370,10 +1433,11 @@ export default function Expenses() {
                   <p className="text-sm font-bold text-destructive">Bs. {expense.amount.toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground mt-1">Doctor: {expense.doctor || 'NA'}</p>
                 </div>
-                <div className="mt-3 flex justify-end">
-                  <Button size="sm" variant="outline" onClick={() => handleDelete(expense)} className="text-xs h-8 text-destructive" disabled={isButtonDisabled}>
-                    <Trash2 className="h-3 w-3 mr-1" />Eliminar
+                <div className="mt-3 flex justify-end gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setExpenseDetail(expense)} className="text-xs h-8">
+                    <Eye className="h-3 w-3 mr-1" />Ver detalle
                   </Button>
+
                 </div>
               </div>
             ))}
@@ -1383,6 +1447,28 @@ export default function Expenses() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={expenseDetail !== null} onOpenChange={(value) => { if (!value) setExpenseDetail(null); }}>
+        <DialogContent className="max-w-[95vw] sm:max-w-md mx-2 sm:mx-auto">
+          <DialogHeader>
+            <DialogTitle>Detalle del gasto</DialogTitle>
+          </DialogHeader>
+          {expenseDetail && (
+            <div className="space-y-3 text-sm">
+              <div className="rounded-lg bg-muted/50 p-3"><p className="text-xs text-muted-foreground">Monto del gasto</p><p className="text-2xl font-semibold">Bs. {Number(expenseDetail.amount).toFixed(2)}</p></div>
+              <p><strong>Fecha:</strong> {formatDateDisplay(expenseDetail.createdDate || expenseDetail.date)}</p>
+              <p><strong>Categoría:</strong> {expenseDetail.category === 'clinic' ? 'Dental Studio' : 'Dr.Dress'}</p>
+              <p><strong>Tipo:</strong> {expenseDetail.type}</p>
+              <p><strong>Descripción:</strong> {expenseDetail.description?.trim() || 'Sin descripción registrada'}</p>
+              {expenseDetail.doctor && <p><strong>Doctor:</strong> {expenseDetail.doctor}</p>}
+              <p><strong>Estado:</strong> {expenseDetail.status === 'completed' ? 'Completado' : 'Pendiente'}</p>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setExpenseDetail(null)}>Cerrar</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={payDialogOpen} onOpenChange={(open) => !isButtonDisabled && setPayDialogOpen(open)}>
         <DialogContent className="max-w-[95vw] sm:max-w-md mx-2 sm:mx-auto">

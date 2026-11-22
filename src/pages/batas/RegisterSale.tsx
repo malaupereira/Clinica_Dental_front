@@ -50,17 +50,26 @@ export default function RegisterSale() {
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
   const [loading, setLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const [rememberedProducts, setRememberedProducts] = useState<Record<string, Product>>({});
   const [isSearching, setIsSearching] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const cartRef = useRef<HTMLDivElement>(null);
+  const submittingRef = useRef(false);
+  const searchSequence = useRef(0);
 
   // Filtrar solo productos con stock (todos son de tipo batas ahora)
   const products = contextProducts.filter(p => p.stock > 0);
+  const allProducts = [
+    ...contextProducts,
+    ...searchResults,
+    ...Object.values(rememberedProducts)
+  ].filter((p, i, arr) => arr.findIndex(item => item.id === p.id) === i);
 
   useEffect(() => {
     const searchProductsFromAPI = async () => {
+      const sequence = ++searchSequence.current;
       if (searchQuery.trim() === '') {
         setSearchResults([]);
         setIsSearching(false);
@@ -71,13 +80,20 @@ export default function RegisterSale() {
       try {
         const results = await searchProducts(searchQuery);
         // Mostrar todos los productos encontrados, incluso con stock 0
+        if (sequence !== searchSequence.current) return;
         setSearchResults(results);
+        setRememberedProducts(previous => ({
+          ...previous,
+          ...Object.fromEntries(results.map(product => [product.id, product]))
+        }));
       } catch (error) {
         console.error('Error searching products:', error);
-        toast.error('Error al buscar productos');
-        setSearchResults([]);
+        if (sequence === searchSequence.current) {
+          toast.error('Error al buscar productos');
+          setSearchResults([]);
+        }
       } finally {
-        setIsSearching(false);
+        if (sequence === searchSequence.current) setIsSearching(false);
       }
     };
 
@@ -86,14 +102,13 @@ export default function RegisterSale() {
   }, [searchQuery]);
 
   const addToCart = (productId: string) => {
-    const allProducts = [...products, ...searchResults];
     const product = allProducts.find(p => p.id === productId);
     if (!product) {
       toast.error('Producto no encontrado');
       return;
     }
     
-    if (product.stock === 0) {
+    if (product.stock <= 0) {
       toast.error('Producto sin stock');
       return;
     }
@@ -113,6 +128,7 @@ export default function RegisterSale() {
       setCart([...cart, { productId, quantity: 1 }]);
     }
 
+    setRememberedProducts(previous => ({ ...previous, [product.id]: product }));
     setSearchQuery('');
     setSearchResults([]);
 
@@ -132,7 +148,6 @@ export default function RegisterSale() {
   };
 
   const updateQuantity = (productId: string, newQuantity: number) => {
-    const allProducts = [...products, ...searchResults];
     const product = allProducts.find(p => p.id === productId);
     
     if (!product) return;
@@ -177,7 +192,6 @@ export default function RegisterSale() {
   };
 
   const calculateSubtotal = () => {
-    const allProducts = [...products, ...searchResults];
     return cart.reduce((sum, item) => {
       const product = allProducts.find(p => p.id === item.productId);
       return sum + (product?.salePrice || 0) * item.quantity;
@@ -231,7 +245,7 @@ export default function RegisterSale() {
       return;
     }
 
-    if (isSubmitting) {
+    if (isSubmitting || submittingRef.current) {
       toast.error('La venta ya se está procesando');
       return;
     }
@@ -241,6 +255,8 @@ export default function RegisterSale() {
   };
 
   const confirmSale = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setShowConfirmation(false);
     setIsSubmitting(true);
     setLoading(true);
@@ -249,15 +265,18 @@ export default function RegisterSale() {
       const currentSubtotal = calculateSubtotal();
       const currentDiscountAmount = calculateDiscountAmount();
       const currentTotal = Math.max(0, currentSubtotal - currentDiscountAmount);
+      if (currentTotal <= 0 || discount < 0 || (discountType === 'percentage' && discount > 100)) {
+        throw new Error('El total o descuento de la venta es inválido');
+      }
+      if (!user?.idUsuario) throw new Error('No se encontró el usuario autenticado');
 
-      if (paymentMethod === 'Mixto' && (cashAmount + qrAmount !== currentTotal)) {
+      if (paymentMethod === 'Mixto' && (Math.round((cashAmount + qrAmount) * 100) !== Math.round(currentTotal * 100))) {
         toast.error('La suma de efectivo y QR debe ser igual al total');
-        setIsSubmitting(false);
-        setLoading(false);
         return;
       }
 
-      const allProducts = [...products, ...searchResults];
+        const missing = cart.find(item => !allProducts.some(p => p.id === item.productId));
+      if (missing) throw new Error('Un producto del carrito ya no está disponible. Actualiza el listado.');
       const productosData = cart.map(item => {
         const product = allProducts.find(p => p.id === item.productId);
         return {
@@ -285,38 +304,41 @@ export default function RegisterSale() {
         idusuario: user?.idUsuario || 0,
         detalles: detalles,
         metodo_pago: paymentMethod,
-        monto_total: currentTotal,
-        monto_efectivo: paymentMethod === 'QR' ? 0 : (paymentMethod === 'Mixto' ? cashAmount : currentTotal),
-        monto_qr: paymentMethod === 'Efectivo' ? 0 : (paymentMethod === 'Mixto' ? qrAmount : currentTotal),
+        monto_total: Number(currentTotal.toFixed(2)),
+        monto_efectivo: Number((paymentMethod === 'QR' ? 0 : (paymentMethod === 'Mixto' ? cashAmount : currentTotal)).toFixed(2)),
+        monto_qr: Number((paymentMethod === 'Efectivo' ? 0 : (paymentMethod === 'Mixto' ? qrAmount : currentTotal)).toFixed(2)),
         productos: productosData
       };
 
       const result = await createSale(saleData);
 
-      if (result.success) {
-        toast.success('Venta registrada exitosamente');
-        
-        await Promise.all([
-          refreshProducts(),
-          refreshBatasRecords(),
-          refreshTransactions()
-        ]);
+      if (!result.success) throw new Error(result.message || 'La venta no pudo registrarse');
 
-        setCart([]);
-        setPaymentMethod('Efectivo');
-        setCashAmount(0);
-        setQrAmount(0);
-        setDiscount(0);
-        setDiscountType('percentage');
-        setSearchQuery('');
-        setSearchResults([]);
-      } else {
-        toast.error('Error al registrar la venta');
+      // La API confirmó la venta. No tratar fallos de actualización visual como fallos del registro.
+      setCart([]);
+      setPaymentMethod('Efectivo');
+      setCashAmount(0);
+      setQrAmount(0);
+      setDiscount(0);
+      setDiscountType('percentage');
+      setSearchQuery('');
+      setSearchResults([]);
+      setRememberedProducts({});
+      toast.success(`Venta #${result.id} registrada exitosamente`);
+
+      const refreshed = await Promise.allSettled([
+        refreshProducts(),
+        refreshBatasRecords(),
+        refreshTransactions()
+      ]);
+      if (refreshed.some(item => item.status === 'rejected')) {
+        toast.warning('La venta se guardó, pero no se pudo actualizar todo el historial. Recarga la página; no repitas la venta.');
       }
     } catch (error) {
       console.error('Error al registrar venta:', error);
-      toast.error('Error al registrar la venta');
+      toast.error(error instanceof Error ? error.message : 'No se pudo confirmar la venta. Revisa el historial antes de volver a intentar.');
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
       setLoading(false);
     }
@@ -327,8 +349,7 @@ export default function RegisterSale() {
   };
 
   const displayProducts = searchQuery ? searchResults : [];
-  const allProducts = [...products, ...searchResults];
-  const canCompleteSale = cart.length > 0 && !cart.some(item => item.quantity === 0);
+  const canCompleteSale = cart.length > 0 && !cart.some(item => item.quantity <= 0) && total > 0 && cart.every(item => allProducts.some(p => p.id === item.productId));
 
   // Función para obtener el nombre completo del producto con talla y color
   const getFullProductName = (product: Product) => {

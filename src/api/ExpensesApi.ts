@@ -1,15 +1,17 @@
 import axios from "axios";
+
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 interface BackendExpense {
   idgasto: number;
   fecha: string;
-  categoria: string;
+  categoria: 'clinic' | 'batas';
   tipo: string;
-  monto: string;
+  descripcion?: string | null;
+  monto: string | number;
   iddoctor: number | null;
-  estado: string;
-  doctor_nombre?: string;
+  estado: 'pending' | 'completed' | 'deleted';
+  doctor_nombre?: string | null;
 }
 
 interface BackendDoctor {
@@ -47,6 +49,7 @@ export interface Expense {
 export interface ExpenseRequest {
   tipo: string;
   categoria: 'clinic' | 'batas';
+  descripcion?: string;
   monto: number;
   iddoctor?: number;
   estado?: 'pending' | 'completed' | 'deleted';
@@ -74,71 +77,53 @@ export interface CommissionPaymentRequest {
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: { "Content-Type": "application/json" }
 });
+
+const mapExpense = (expense: BackendExpense): Expense => ({
+  id: String(expense.idgasto),
+  type: expense.tipo,
+  doctor: expense.doctor_nombre || '',
+  description: expense.descripcion || '',
+  amount: Number(expense.monto),
+  category: expense.categoria,
+  status: expense.estado,
+  createdDate: expense.fecha,
+  date: expense.fecha,
+  isCommission: expense.tipo === 'Pago Comisión Doctores'
+});
+
+const apiError = (error: unknown, fallback: string): Error => {
+  if (axios.isAxiosError(error)) {
+    return new Error(error.response?.data?.error || fallback);
+  }
+  return new Error(fallback);
+};
 
 export const getExpenses = async (): Promise<Expense[]> => {
   try {
-    const response = await api.get<BackendExpense[]>("/expenses");
-    return response.data.map((expense) => ({
-      id: expense.idgasto.toString(),
-      type: expense.tipo,
-      doctor: expense.doctor_nombre || '',
-      description: '',
-      amount: parseFloat(expense.monto),
-      category: expense.categoria as 'clinic' | 'batas',
-      status: expense.estado as 'pending' | 'completed' | 'deleted',
-      createdDate: expense.fecha,
-      date: expense.fecha,
-      isCommission: expense.tipo === 'Pago Comisión Doctores'
-    }));
+    const response = await api.get<BackendExpense[]>('/expenses');
+    return response.data.map(mapExpense);
   } catch (error) {
-    console.error("Error fetching expenses:", error);
-    throw new Error("No se pudieron cargar los gastos");
+    throw apiError(error, 'No se pudieron cargar los gastos');
   }
 };
 
 export const createExpense = async (expense: ExpenseRequest): Promise<Expense> => {
   try {
-    const response = await api.post<BackendExpense>("/expenses", expense);
-    return {
-      id: response.data.idgasto.toString(),
-      type: response.data.tipo,
-      doctor: response.data.doctor_nombre || '',
-      description: '',
-      amount: parseFloat(response.data.monto),
-      category: response.data.categoria as 'clinic' | 'batas',
-      status: response.data.estado as 'pending' | 'completed' | 'deleted',
-      createdDate: response.data.fecha,
-      date: response.data.fecha,
-      isCommission: response.data.tipo === 'Pago Comisión Doctores'
-    };
+    const response = await api.post<BackendExpense>('/expenses', expense);
+    return mapExpense(response.data);
   } catch (error) {
-    console.error("Error creating expense:", error);
-    throw new Error("No se pudo crear el gasto");
+    throw apiError(error, 'No se pudo crear el gasto');
   }
 };
 
 export const updateExpense = async (id: string, expense: ExpenseRequest): Promise<Expense> => {
   try {
     const response = await api.put<BackendExpense>(`/expenses/${id}`, expense);
-    return {
-      id: response.data.idgasto.toString(),
-      type: response.data.tipo,
-      doctor: response.data.doctor_nombre || '',
-      description: '',
-      amount: parseFloat(response.data.monto),
-      category: response.data.categoria as 'clinic' | 'batas',
-      status: response.data.estado as 'pending' | 'completed' | 'deleted',
-      createdDate: response.data.fecha,
-      date: response.data.fecha,
-      isCommission: response.data.tipo === 'Pago Comisión Doctores'
-    };
+    return mapExpense(response.data);
   } catch (error) {
-    console.error("Error updating expense:", error);
-    throw new Error("No se pudo actualizar el gasto");
+    throw apiError(error, 'No se pudo actualizar el gasto');
   }
 };
 
@@ -146,45 +131,40 @@ export const deleteExpense = async (id: string): Promise<void> => {
   try {
     await api.patch(`/expenses/${id}/status`, { estado: 'deleted' });
   } catch (error) {
-    console.error("Error deleting expense:", error);
-    throw new Error("No se pudo eliminar el gasto");
+    throw apiError(error, 'No se pudo eliminar el gasto');
   }
 };
 
 export const payExpense = async (paymentData: PaymentRequest): Promise<void> => {
   try {
-    await api.post("/expenses/pay", paymentData);
+    await api.post('/expenses/pay', paymentData);
   } catch (error) {
-    console.error("Error paying expense:", error);
-    throw new Error("No se pudo procesar el pago");
+    throw apiError(error, 'No se pudo procesar el pago');
   }
 };
 
 export const payCommissionGroup = async (paymentData: CommissionPaymentRequest): Promise<void> => {
   try {
-    await api.post("/expenses/pay-commission-group", paymentData);
+    await api.post('/expenses/pay-commission-group', paymentData);
   } catch (error) {
-    console.error("Error paying commission group:", error);
-    throw new Error("No se pudo procesar el pago de comisiones");
+    throw apiError(error, 'No se pudo procesar el pago de comisiones');
   }
 };
 
 export const getDoctors = async (): Promise<BackendDoctor[]> => {
   try {
-    const response = await api.get<BackendDoctor[]>("/expenses/doctors");
+    const response = await api.get<BackendDoctor[]>('/expenses/doctors');
     return response.data;
   } catch (error) {
-    console.error("Error fetching doctors:", error);
-    throw new Error("No se pudieron cargar los doctores");
+    throw apiError(error, 'No se pudieron cargar los doctores');
   }
 };
 
 export const getBoxBalances = async (): Promise<BoxBalanceResponse> => {
   try {
-    const response = await api.get<BoxBalanceResponse>("/expenses/box-balances");
+    const response = await api.get<BoxBalanceResponse>('/expenses/box-balances');
     return response.data;
   } catch (error) {
-    console.error("Error fetching box balances:", error);
-    throw new Error("No se pudieron cargar los saldos de las cajas");
+    throw apiError(error, 'No se pudieron cargar los saldos de las cajas');
   }
 };

@@ -1,5 +1,5 @@
-import axios from "axios";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import axios from 'axios';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 interface BackendProduct {
   idproducto: number;
@@ -50,59 +50,54 @@ export interface SaleResponse {
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: { 'Content-Type': 'application/json' },
 });
+
+const parseProduct = (product: BackendProduct): Product => ({
+  id: String(product.idproducto),
+  name: product.nombre,
+  purchasePrice: Number(product.precio_compra),
+  salePrice: Number(product.precio_venta),
+  stock: Number(product.stock),
+  minStock: Number(product.stock_minimo),
+  type: 'batas',
+  talla: product.talla || undefined,
+  color: product.color || undefined,
+  warehouseStock: Number(product.stock_bodega ?? 0),
+});
+
+const getError = (error: unknown, fallback: string) => {
+  if (axios.isAxiosError(error)) {
+    if (!error.response) return new Error('No se pudo confirmar la operación con el servidor. Revisa el historial antes de volver a intentar.');
+    return new Error(error.response.data?.error || fallback);
+  }
+  return error instanceof Error ? error : new Error(fallback);
+};
 
 export const getProducts = async (): Promise<Product[]> => {
   try {
-    const response = await api.get<BackendProduct[]>("/sales/products");
-    return response.data.map((product) => ({
-      id: product.idproducto.toString(),
-      name: product.nombre,
-      purchasePrice: parseFloat(product.precio_compra),
-      salePrice: parseFloat(product.precio_venta),
-      stock: product.stock,
-      minStock: product.stock_minimo,
-      type: 'batas',
-      talla: product.talla || undefined,
-      color: product.color || undefined,
-      warehouseStock: product.stock_bodega || 0
-    }));
+    const response = await api.get<BackendProduct[]>('/sales/products');
+    return response.data.map(parseProduct);
   } catch (error) {
-    console.error("Error fetching products:", error);
-    throw new Error("No se pudieron cargar los productos");
+    throw getError(error, 'No se pudieron cargar los productos');
   }
 };
 
-export const searchProducts = async (query: string): Promise<Product[]> => {
+export const searchProducts = async (term: string): Promise<Product[]> => {
   try {
-    const response = await api.get<BackendProduct[]>(`/sales/products/search?q=${encodeURIComponent(query)}`);
-    return response.data.map((product) => ({
-      id: product.idproducto.toString(),
-      name: product.nombre,
-      purchasePrice: parseFloat(product.precio_compra),
-      salePrice: parseFloat(product.precio_venta),
-      stock: product.stock,
-      minStock: product.stock_minimo,
-      type: 'batas',
-      talla: product.talla || undefined,
-      color: product.color || undefined,
-      warehouseStock: product.stock_bodega || 0
-    }));
+    const response = await api.get<BackendProduct[]>('/sales/products/search', { params: { q: term } });
+    return response.data.map(parseProduct);
   } catch (error) {
-    console.error("Error searching products:", error);
-    throw new Error("No se pudieron buscar los productos");
+    throw getError(error, 'No se pudieron buscar los productos');
   }
 };
 
 export const createSale = async (saleData: SaleRequest): Promise<SaleResponse> => {
   try {
-    const response = await api.post<SaleResponse>("/sales", saleData);
+    const response = await api.post<SaleResponse>('/sales', saleData);
     return response.data;
   } catch (error) {
-    console.error("Error creating sale:", error);
-    throw new Error("No se pudo registrar la venta");
+    throw getError(error, 'No se pudo registrar la venta');
   }
 };
+  
